@@ -13,14 +13,20 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="资源文件\Shader">
+    <Filter Include="资源文件\Textures">
+      <UniqueIdentifier>{cd3fa017-3000-4eb4-8987-f8d22b008175}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源文件\Shaders">
       <UniqueIdentifier>{2bfbf6e7-29a8-47a3-90ba-a330fa677804}</UniqueIdentifier>
     </Filter>
-    <Filter Include="资源文件\Shader\Vert">
+    <Filter Include="资源文件\Shaders\Vert">
       <UniqueIdentifier>{4de220e4-905a-4df8-a089-7f67b623d9d1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="资源文件\Shader\Frag">
+    <Filter Include="资源文件\Shaders\Frag">
       <UniqueIdentifier>{f6473363-73c6-42a9-87d8-d6214f0e4b10}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源文件\Models">
+      <UniqueIdentifier>{4b76e6bb-0d5f-4434-bcfa-9a714ba8fc07}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -34,10 +40,10 @@
   <ItemGroup>
     <None Include="packages.config" />
     <None Include="shader.vert">
-      <Filter>资源文件\Shader\Vert</Filter>
+      <Filter>资源文件\Shaders\Vert</Filter>
     </None>
     <None Include="shader.frag">
-      <Filter>资源文件\Shader\Frag</Filter>
+      <Filter>资源文件\Shaders\Frag</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -62,9 +68,6 @@
     <ClInclude Include="CRender.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="CTest.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="CRecreateSwapChain.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -80,5 +83,28 @@
     <ClInclude Include="CDescriptorLayoutBuffer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CDescriptorPoolSets.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CTextureImage.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CLoadModel.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CMipMap.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CMultiSample.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="C:\Users\32239\AppData\Local\Temp\boy.jpg">
+      <Filter>资源文件\Textures</Filter>
+    </Image>
+    <Image Include="viking_room.png">
+      <Filter>资源文件\Textures</Filter>
+    </Image>
   </ItemGroup>
 </Project>

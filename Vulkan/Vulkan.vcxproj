@@ -77,7 +77,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>D:\vc_packages;E:\allsoftware\Vulkan\1.2.141.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -92,7 +92,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>D:\vc_packages;E:\allsoftware\Vulkan\1.2.141.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -109,7 +109,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>D:\vc_packages;E:\allsoftware\Vulkan\1.2.141.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,7 +128,7 @@
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>D:\vc_packages;E:\allsoftware\Vulkan\1.2.141.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -162,10 +162,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
     <ClInclude Include="CDescriptorLayoutBuffer.h" />
+    <ClInclude Include="CDescriptorPoolSets.h" />
     <ClInclude Include="CIndexBuffer.h" />
     <ClInclude Include="CFile.h" />
     <ClInclude Include="CFrameBuffer.h" />
     <ClInclude Include="CExtraBuffer.h" />
+    <ClInclude Include="CLoadModel.h" />
+    <ClInclude Include="CMipMap.h" />
+    <ClInclude Include="CMultiSample.h" />
     <ClInclude Include="CPipeline.h" />
     <ClInclude Include="CQueue.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -180,7 +184,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="CTest.h" />
+    <ClInclude Include="CTextureImage.h" />
     <ClInclude Include="CVertexShader.h" />
     <ClInclude Include="CWindowSurface.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -189,10 +193,16 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Image Include="C:\Users\32239\AppData\Local\Temp\boy.jpg" />
+    <Image Include="viking_room.png" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="D:\vc_packages\glfw.3.3.2\build\native\glfw.targets" Condition="Exists('D:\vc_packages\glfw.3.3.2\build\native\glfw.targets')" />
     <Import Project="D:\vc_packages\glm.0.9.9.800\build\native\glm.targets" Condition="Exists('D:\vc_packages\glm.0.9.9.800\build\native\glm.targets')" />
+    <Import Project="D:\vc_packages\Assimp.redist.3.0.0\build\native\Assimp.redist.targets" Condition="Exists('D:\vc_packages\Assimp.redist.3.0.0\build\native\Assimp.redist.targets')" />
+    <Import Project="D:\vc_packages\Assimp.3.0.0\build\native\Assimp.targets" Condition="Exists('D:\vc_packages\Assimp.3.0.0\build\native\Assimp.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
@@ -200,5 +210,7 @@
     </PropertyGroup>
     <Error Condition="!Exists('D:\vc_packages\glfw.3.3.2\build\native\glfw.targets')" Text="$([System.String]::Format('$(ErrorText)', 'D:\vc_packages\glfw.3.3.2\build\native\glfw.targets'))" />
     <Error Condition="!Exists('D:\vc_packages\glm.0.9.9.800\build\native\glm.targets')" Text="$([System.String]::Format('$(ErrorText)', 'D:\vc_packages\glm.0.9.9.800\build\native\glm.targets'))" />
+    <Error Condition="!Exists('D:\vc_packages\Assimp.redist.3.0.0\build\native\Assimp.redist.targets')" Text="$([System.String]::Format('$(ErrorText)', 'D:\vc_packages\Assimp.redist.3.0.0\build\native\Assimp.redist.targets'))" />
+    <Error Condition="!Exists('D:\vc_packages\Assimp.3.0.0\build\native\Assimp.targets')" Text="$([System.String]::Format('$(ErrorText)', 'D:\vc_packages\Assimp.3.0.0\build\native\Assimp.targets'))" />
   </Target>
 </Project>

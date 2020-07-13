@@ -1,8 +1,7 @@
-#include "CTest.h"
-using namespace test8;
+#include "CMultiSample.h"
 
 int main() {
-	test8::CTest app;
+	CTest app;
 
 	try {
 		app.run();
