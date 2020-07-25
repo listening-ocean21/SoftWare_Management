@@ -60,7 +60,7 @@ VkResult createDebugUtilsMessengerEXT(VkInstance vInstance,
 	const VkAllocationCallbacks* pAllocator,
 	VkDebugUtilsMessengerEXT* pCallback)
 {
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vInstance, "vkCreateDebugUtilsMessengerEXT");
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vInstance, "vkCreateDebugReportCallbackEXT");
 	if (func != nullptr) {
 		return func(vInstance, pCreateInfo, pAllocator, pCallback);
 	}
@@ -400,8 +400,9 @@ private:
 	bool __checkValidationLayerSupport()
 	{
 		uint32_t LayerCount;
+		//第一次，将第二个参数设置为 NULL，会在第一个参数 instanceLayerCount 中返回层的数量。
 		vkEnumerateInstanceLayerProperties(&LayerCount, nullptr);
-
+		//在第二次调用中，不是将第二个参数设置为 NULL，而是向其传递一个 VkLayerProperties 的 vector，并将获得的详细属性信息传递到其中进行存储。
 		std::vector<VkLayerProperties> AvailableLayers(LayerCount);
 		vkEnumerateInstanceLayerProperties(&LayerCount, AvailableLayers.data());
 

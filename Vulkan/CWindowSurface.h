@@ -46,7 +46,7 @@ VkResult createDebugUtilsMessengerEXT(VkInstance vInstance,
 	const VkAllocationCallbacks* pAllocator,
 	VkDebugUtilsMessengerEXT* pCallback)
 {
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vInstance, "vkCreateDebugUtilsMessengerEXT");
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vInstance, "vkCreateDebugReportCallbackEXT");
 	if (func != nullptr) {
 		return func(vInstance, pCreateInfo, pAllocator, pCallback);
 	}

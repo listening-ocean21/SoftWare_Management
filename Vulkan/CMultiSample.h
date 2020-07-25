@@ -1,5 +1,3 @@
-// LNK1107.cpp
-// compile with: /clr /LD
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -46,7 +44,7 @@ const std::string TEXTURE_PATH = "viking_room.png";
 //来隐式的开启有所关于诊断layers，
 //从而避免明确的指定所有的明确的诊断层。
 const std::vector<const char*> ValidationLayers = {
-	"VK_LAYER_KHRONOS_validation"
+	"VK_LAYER_LUNARG_standard_validation"
 };
 
 //定义所需的设备扩展列表
@@ -65,7 +63,7 @@ const bool enableValidationLayers = true;
 //但由于vkCreateDebugUtilsMessengerEXT函数是一个扩展函数，不会被Vulkan库自动加载，需要使用vkGetInstanceProcAddr函数来加载
 //FUNCTION:一个代理函数，主要是为了加载vkCreateDebugUtilsMessengerEXT函数
 VkResult createDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
 	if (func != nullptr) {
 		return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
 	}
@@ -309,7 +307,7 @@ private:
 	void __initVulkan()
 	{
 		__createInstance();
-		//__setupDebugCallBack();
+		__setupDebugCallBack();
 		__createSurface();
 		//创建实例之后，需要在系统中找到一个支持功能的显卡，查找第一个图像卡作为适合物理设备
 		__pickPhysicalDevice();
@@ -549,7 +547,7 @@ private:
 	}
 
 	//创建逻辑设备：
-	//FUNC:主要与物理设备进行交互
+	//FUNC:主要与物理设备进行交互，创建一个逻辑设备对象时会自动创建若干队列
 	void __createLogicalDevice()
 	{
 		//创建队列
