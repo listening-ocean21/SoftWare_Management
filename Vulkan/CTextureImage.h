@@ -277,9 +277,11 @@ namespace test9
 			__createInstance();
 			//__setupDebugCallBack();
 			__createSurface();
+
 			//创建实例之后，需要在系统中找到一个支持功能的显卡，查找第一个图像卡作为适合物理设备
 			__pickPhysicalDevice();
 			__createLogicalDevice();
+
 			__createSwapShain();
 			__createImageViews();
 			__createRenderPass();
@@ -287,20 +289,25 @@ namespace test9
 			__createDescritorSetLayout();
 			__createGraphicsPipelines();
 			__createFrameBuffers();
-			__createCommandPool();
+			__createCommandPool(); 
+
 			__createTextureImage();
 			//有了纹理，需要纹理视图才能访问纹理
 			__createTextureImageView();
 			//配置采样器对象。稍后会使用它从着色器中读取颜色。样器没有任何地方引用VkImage。采样器是一个独特的对象，它提供了从纹理中提取颜色的接口。它可以应用在任何你期望的图像中，无论是1D，2D，或者是3D
 			__createTextureSampler();
+
 			__createVertexBuffer();
 			__createIndexBuffer();
 			__createUniformBuffer();
+
 			//创建描述符池
 			__createDescritorPool();
 			__createDescriptorSet();
+
 			__createCommandBuffers();
-			__creatSemaphores(); //创造信号量
+
+			__createSyncObjects(); //创造信号量
 		}
 
 		//重建交换链
@@ -396,7 +403,7 @@ namespace test9
 			{
 				vkDestroyBuffer(m_Device, m_UniformBuffers[i], nullptr);
 				vkFreeMemory(m_Device, m_UniformBuffersMemory[i], nullptr);
-				vkDestroyFence(m_Device, m_ImagesInFlight[i], nullptr);
+				//vkDestroyFence(m_Device, m_ImagesInFlight[i], nullptr);
 			}
 		    
 			vkDestroyImage(m_Device, m_TextureImage, nullptr);
@@ -678,7 +685,7 @@ namespace test9
 
 		void __populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& VCreateInfo) {
 			VCreateInfo = {};
-			VCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			VCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
 			VCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 			VCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 			VCreateInfo.pfnUserCallback = __debugCallBack;
@@ -992,14 +999,15 @@ namespace test9
 
 			//子通道依赖：渲染通道中的子通道会自动处理布局的变换。这些变换通过子通道的依赖关系进行控制
 			VkSubpassDependency SubpassDependency = {};
-			SubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;  //指定要依赖关系
+			SubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;  //特殊值VK_SUBPASS_EXTERNAL指的是渲染通道之前或之后根据是否在srcSubpass或dstSubpass中要依赖的隐含子通道
 			SubpassDependency.dstSubpass = 0;  //从属子通道的索引
+			//指定了要等待的操作和这些操作在什么阶段产生。我们要等到交换链完成从图像的读取才能访问图像。这可以通过等待颜色附件输出阶段来做：
 			SubpassDependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT; //指定等待的操作，这里等待交换链完成对应图像的读取操作。这可以通过等待颜色附件输出的阶段来实现
 			SubpassDependency.srcAccessMask = 0;
-			//在颜色附件阶段的操作及涉及颜色附件的读取和写入的操作应该等待。这些设置将阻止转换发生
+
+			//等待这个的操作是在颜色附件阶段，且涉及到读取和写入颜色附件。这些设置将会阻止转移的发生，直到有必要或者允许的时候，也就是我们想要开始向它写入颜色的时候。
 			SubpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			SubpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
 			RenderPassCreateInfo.dependencyCount = 1;
 			RenderPassCreateInfo.pDependencies = &SubpassDependency;
 
@@ -1252,9 +1260,6 @@ namespace test9
 				//参数：1.指令缓冲对象  2.渲染流程信息  3.所有要执行的指令都在主要指令缓冲中，没有辅助指令缓冲需要执行
 				vkCmdBeginRenderPass(m_CommandBuffers[i], &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				//绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
-				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-
 				//绑定顶点缓冲区
 				VkBuffer VertexBuffers[] = { m_VertexBuffer };
 				VkDeviceSize  OffSets[] = { 0 };
@@ -1263,6 +1268,9 @@ namespace test9
 				//索引缓冲区
 				vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+				//绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
+				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+
 				//将描述符集合绑定到实际的着色器的描述符中
 				vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
 
@@ -1270,7 +1278,7 @@ namespace test9
 				//参数：1.指定索引的数量 2.几何instanceing数量. 3：没有使用instancing，所以指定1。索引数表示被传递到顶点缓冲区中的顶点数量
 				//4：指定索引缓冲区的偏移量，使用1将会导致图形卡在第二个索引处开始读取  5.定索引缓冲区中添加的索引的偏移。 6.指定instancing偏移量，我们没有使用该特性
 				vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-
+				
 				//结束渲染流程
 				vkCmdEndRenderPass(m_CommandBuffers[i]);
 
@@ -1283,15 +1291,17 @@ namespace test9
 
 		//绘制步骤：需要同步操作，栅栏（用于应用程序与渲染操作进行同步）或者信号量（用于在命令队列内或者跨命令队列同步操作）实现同步
 		//1.首先，从交换链中获取一图像
-		//2.从帧缓冲中使用作为附件的图像执行命令缓冲区中的命令
+		//2.从帧缓冲中使用作为附件的图像执行命令缓冲区中的命令NDLE,
 		//3.渲染后的图像返回交换链
+		//为什么需要同步？以上三个步骤都是异步处理的，没有一定的顺序执行，实际上每一步都需要上一步的结果才能运行，因此需要设置信号量来同步
 		void __drawFrame()
 		{
+			//等前一帧完成
 			vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
 			uint32_t ImageIndex;
-			//重建交换链
-			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, std::numeric_limits<uint64_t>::max(), m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
+			//1.首先，从交换链中获取一图像
+			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
 			if (Result == VK_ERROR_OUT_OF_DATE_KHR)  //VK_ERROR_OUT_OF_DATE_KHR：交换链不能继续使用。通常发生在窗口大小改变后
 			{
 				__recreateSwapChain();
@@ -1303,21 +1313,20 @@ namespace test9
 			}
 
 			__updateUniformBuffer(ImageIndex);
-			//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
-			//vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
-			//1.从交换链中获取一图像
 
-			//获取命令缓冲
-			//vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
+			//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
+			//核验当前帧是否使用了这个图像
 			if (m_ImagesInFlight[ImageIndex] != VK_NULL_HANDLE) {
 				vkWaitForFences(m_Device, 1, &m_ImagesInFlight[ImageIndex], VK_TRUE, UINT64_MAX);
 			}
+			//标价当前帧正在使用这个图像
 			m_ImagesInFlight[ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
-			//2.提交命令缓冲区
+			//2.提交命令缓冲到图形队列
 			VkSubmitInfo SubmitInfo = {};
 			SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
+			//该信号量标记一个图像已经获取到且准备渲染就绪，WaitStages表示管线在那个阶段等待
 			VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
 			VkPipelineStageFlags WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 			SubmitInfo.waitSemaphoreCount = 1;
@@ -1328,15 +1337,17 @@ namespace test9
 			SubmitInfo.commandBufferCount = 1;
 			SubmitInfo.pCommandBuffers = &m_CommandBuffers[ImageIndex];
 
-			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore
+			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore：渲染已经完成可以呈现了
 			VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
 			SubmitInfo.signalSemaphoreCount = 1;
 			SubmitInfo.pSignalSemaphores = SignalSemaphores;
 
+			//重置来解除标记
 			vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
-			//向图像队列提交命令缓冲区
-			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+			//将命令缓冲区提交到图形队列
+			//当命令缓冲完成执行的时候应该标记的栅栏。我们可以用这个来标记一个帧已经完成了
+			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to submit draw command buffer!");
 			}
 
@@ -1354,8 +1365,7 @@ namespace test9
 			PresentInfo.pImageIndices = &ImageIndex;
 			//PresentInfo.pResults = nullptr;
 
-			//不完全匹配时重建交换链
-			//提交请求呈现交换链中的图像
+			//提交请求呈现图像给交换链
 			Result = vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
 			if (Result == VK_ERROR_OUT_OF_DATE_KHR || Result == VK_SUBOPTIMAL_KHR || m_WindowResized) {
 				m_WindowResized = false;
@@ -1366,13 +1376,20 @@ namespace test9
 			}
 
 			//开始绘制下一帧之前明确的等待presentation完成:
+			//该程序在drawFrame方法中快速地提交工作，但是实际上却不检查这些工作是否完成了。如果CPU提交的工作比GPU能处理的快，那么队列会慢慢被工作填充满
+			//解决方法：1.可以使用在drawFrame最后等待工作完成
 			//vkQueueWaitIdle(m_PresentQueue);
+			//2.设置最大并发处理帧数，为每一帧设置信号量
+			//const int MAX_FRAMES_IN_FLIGHT = 2;
+			//std::vector<VkSemaphore> imageAvailableSemaphores;
+			//std::vector<VkSemaphore> renderFinishedSemaphores;
 
+			//为了每次使用正确配对的信号量；我们要跟踪当前帧，这里设置一个帧索引：
 			m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		}
 
-		//创建信号量
-		void __creatSemaphores()
+		//同步原语：1.创建信号量，创建信号量集合，为多个并行帧  2.Fence
+		void __createSyncObjects()
 		{
 			m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 			m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1537,7 +1554,6 @@ namespace test9
 
 			//清除指令缓冲对象
 			vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &vCommandBuffer);
-
 		}
 
 		//使用缓冲区读取图像，则命令要求图像在正确的布局中
@@ -1725,7 +1741,7 @@ namespace test9
 			float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count() / 1000.0f;
 
 			UniformBufferObject UBO = {};
-			UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+			UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 			//glm::lookAt 函数以眼睛位置，中心位置和上方向为参数。
 			UBO.ViewMatrix = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 			//选择使用FOV为45度的透视投影。其他参数是宽高比，近裁剪面和远裁剪面。重要的是使用当前的交换链扩展来计算宽高比，以便在窗体调整大小后参考最新的窗体宽度和高度。
@@ -1735,6 +1751,7 @@ namespace test9
 
 			//以将UBO中的数据复制到uniform缓冲区
 			void* Data;
+			//映射设备内存
 			vkMapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage], 0, sizeof(UBO), 0, &Data);
 			memcpy(Data, &UBO, sizeof(UBO));
 			vkUnmapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage]);
@@ -1778,6 +1795,7 @@ namespace test9
 
 			m_DescriptorSets.resize(m_SwapChainImages.size());
 			//不需要明确清理描述符集合，因为它们会在描述符对象池销毁的时候自动清
+			//从描述符池分配描述符集对象
 			if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
 			{
 				throw std::runtime_error("failed to allocate descriptor set!");
@@ -1800,11 +1818,11 @@ namespace test9
 
 				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[0].dstSet = m_DescriptorSets[i];
-				descriptorWrites[0].dstBinding = 0;
-				descriptorWrites[0].dstArrayElement = 0;
-				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-				descriptorWrites[0].descriptorCount = 1;
-				descriptorWrites[0].pBufferInfo = &BufferInfo;
+				descriptorWrites[0].dstBinding = 0;                  //为 uniform buffer 绑定的索引设定为0
+				descriptorWrites[0].dstArrayElement = 0;             //描述符可以是数组，所以需要指定要更新的数组索引。在这里没有使用数组，所以简单的设置为0
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //指定描述符类型
+				descriptorWrites[0].descriptorCount = 1;             //指定描述多少描述符需要被更新
+				descriptorWrites[0].pBufferInfo = &BufferInfo;      //指定描述符引用的缓冲区数据 
 
 				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 				descriptorWrites[1].dstSet = m_DescriptorSets[i];
@@ -1812,25 +1830,10 @@ namespace test9
 				descriptorWrites[1].dstArrayElement = 0;
 				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 				descriptorWrites[1].descriptorCount = 1;
-				descriptorWrites[1].pImageInfo = &imageInfo;
-
+				descriptorWrites[1].pImageInfo = &imageInfo;   ////指定描述符引用的图像数据
+				//更新描述符的配置
 				vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-
-				////更新描述符的配置
-				//VkWriteDescriptorSet DescriptorWrite{};
-				//DescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				//DescriptorWrite.dstSet = m_DescriptorSets[i];
-				//DescriptorWrite.dstBinding = 0;         //为 uniform buffer 绑定的索引设定为0
-				//DescriptorWrite.dstArrayElement = 0;    //描述符可以是数组，所以需要指定要更新的数组索引。在这里没有使用数组，所以简单的设置为0
-				//DescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //指定描述符类型
-				//DescriptorWrite.descriptorCount = 1;		//指定描述多少描述符需要被更新
-				//DescriptorWrite.pBufferInfo = &BufferInfo;	//指定描述符引用的缓冲区数据
-				////DescriptorWrite.pImageInfo = nullptr;       //指定描述符引用的图像数据
-				////DescriptorWrite.pTexelBufferView = nullptr; //指定缓冲区视图
-
-				////更新
-				//vkUpdateDescriptorSets(m_Device, 1, &DescriptorWrite, 0, nullptr);
-				////现在需要更新__createCommandBuffers函数，使用cmdBindDescriptorSets将描述符集合绑定到实际的着色器的描述符中：
+				//现在需要更新__createCommandBuffers函数，使用cmdBindDescriptorSets将描述符集合绑定到实际的着色器的描述符中：
 			}
 		}
 
@@ -1854,8 +1857,12 @@ namespace test9
 			__createBuffer(ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
 				           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				           StagingBuffer, StagingBufferMemory);
+
+			//使用映射（vkMapMemory）和解映射（vkUnmapMemory）函数将图像数据 push 到 GPU 上。
 			void* data;
+			//将GPU映射到host内存上
 			vkMapMemory(m_Device, StagingBufferMemory, 0, ImageSize, 0, &data);
+			//将缓冲区数据copy到GPU
 			memcpy(data, Pixels, static_cast<size_t>(ImageSize));
 			vkUnmapMemory(m_Device, StagingBufferMemory);
 
@@ -1931,11 +1938,11 @@ namespace test9
 			VkSamplerCreateInfo SamplerInfo = {};
 			//指定过滤器和变换
 			SamplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			SamplerInfo.magFilter = VK_FILTER_LINEAR;   //指定纹素放大内插值方式
+			SamplerInfo.magFilter = VK_FILTER_LINEAR;   //指定纹素放大内插值方式，，使用最接近计算纹理坐标的周围的四个像素的加权平均值。
 			SamplerInfo.minFilter = VK_FILTER_LINEAR;   //指定纹素缩小内插值方式
 
 			//指定每个轴向使用的寻址模式，纹理空间坐标UVW对应着XYZ
-			SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;  //当超过图像尺寸的时候采用循环填充。
+			SamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;  //当图像纹理元素坐标超出 [0 .. 1] 范围时，此字段控制沿 U 坐标的图像环绕。 。
 			SamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 			SamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
@@ -1951,7 +1958,7 @@ namespace test9
 
 			//如果开启比较功能，那么纹素首先和值进行比较，并且比较后的值用于过滤操作。主要用在阴影纹理映射的percentage-closer filtering 即百分比近似过滤器。
 			SamplerInfo.compareEnable = VK_FALSE;
-			SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+			SamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS; //在执行所需的过滤之前，可以使用此字段中指定的比较函数比较取出的纹理元素数据。 
 
 			//mipmapping
 			SamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;

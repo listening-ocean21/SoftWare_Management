@@ -308,6 +308,7 @@ private:
 	{
 		__createInstance();
 		__setupDebugCallBack();
+
 		__createSurface();
 		//创建实例之后，需要在系统中找到一个支持功能的显卡，查找第一个图像卡作为适合物理设备
 		__pickPhysicalDevice();
@@ -1026,7 +1027,7 @@ private:
 		VkAttachmentDescription DepthAttachment = {};
 		DepthAttachment.format = __findDepthFormat();
 		DepthAttachment.samples = m_MsaaSamples;
-		DepthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		DepthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;   //在每个 Render Pass 实例开始时清除缓冲区
 		DepthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		DepthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		DepthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1128,11 +1129,12 @@ private:
 		PipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t> (AttributeDescription.size());
 		PipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = AttributeDescription.data();
 
+		//输入装配的阶段中，把这些顶点组装成基本的图元
 		//顶点数据的集合图元拓扑结构和是否启用顶点索重新开始图元
 		VkPipelineInputAssemblyStateCreateInfo  PipelineInputAssemblyStateCreateInfo = {};
 		PipelineInputAssemblyStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		PipelineInputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;  //三点共面，顶点不共用
-		PipelineInputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE;
+		PipelineInputAssemblyStateCreateInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;  //使用三个顶点的一个集合生成实心三角形,三点共面，顶点不共用 .该字段使用 VkPrimitiveTopology 枚举指定正在使用的基本拓扑结构的类型。 
+		PipelineInputAssemblyStateCreateInfo.primitiveRestartEnable = VK_FALSE; //布尔标志确定是否将特殊标记或顶点索引用作图元重启功能。 当 vkCmdBindIndexBuffer 分别为 VK_INDEX_TYPE_UINT32 或 VK_INDEX_TYPE_UINT16 时，该特殊索引值应为 0xFFFFFFFF 或 0xFFFF。 对于基于列表的拓扑，图元重启不适用
 
 		//视图
 		VkViewport Viewport = {};
@@ -1217,9 +1219,9 @@ private:
 		VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo = {};
 		PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		PipelineLayoutCreateInfo.setLayoutCount = 1; // Optional
-		PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout; // Optional
-
-
+		PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout; //  描述符集绑定信息是通过管线内（VkPipeline）的管线布局进行访问的。
+	
+		//创建管线布局对象
 		if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create pipeline layout!");
 		}
@@ -1304,6 +1306,7 @@ private:
 	}
 
 	//创建指令缓冲对象
+	//命令缓冲区是使用 vkAllocateCommandBuffers（）API 从命令缓冲池（VkCommandPool）分配的。
 	void __createCommandBuffers()
 	{
 		m_CommandBuffers.resize(m_SwapChainFrameBuffers.size());
@@ -1314,6 +1317,7 @@ private:
 		CommandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;   //可以被提交到队列进行执行，但不能被其它指令缓冲对象调用。
 		CommandBufferAllocateInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
 
+		//指令缓冲区
 		if (vkAllocateCommandBuffers(m_Device, &CommandBufferAllocateInfo, m_CommandBuffers.data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate command buffers!");
 		}
@@ -1338,6 +1342,7 @@ private:
 			//渲染区域，这里与附着保持一致
 			RenderPassBeginInfo.renderArea.offset = { 0,0 };
 			RenderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
+
 			//清除值
 			std::array<VkClearValue, 2> ClearValues = {};
 			ClearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1345,7 +1350,8 @@ private:
 			RenderPassBeginInfo.clearValueCount = static_cast<uint32_t>(ClearValues.size());
 			RenderPassBeginInfo.pClearValues = ClearValues.data();
 
-			//参数：1.指令缓冲对象  2.渲染流程信息  3.所有要执行的指令都在主要指令缓冲中，没有辅助指令缓冲需要执行
+			//绑定RenderPass:
+			//参数：1.指令缓冲对象  2.渲染流程信息  3.所有要执行的指令都在主要指令缓冲中，没有辅助指令缓冲需要执行，主命令缓冲区直接记录子通道内容，并且不允许在该子通道内执行辅助命令缓冲区。
 			vkCmdBeginRenderPass(m_CommandBuffers[i], &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			//绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
@@ -1356,7 +1362,7 @@ private:
 			VkDeviceSize  OffSets[] = { 0 };
 			vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, VertexBuffers, OffSets);
 
-			//索引缓冲区
+			//绑定索引缓冲区
 			vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 			//将描述符集合绑定到实际的着色器的描述符中
@@ -1398,19 +1404,13 @@ private:
 			throw std::runtime_error("failed to acquire SwapChain Image!");
 		}
 
-		__updateUniformBuffer(ImageIndex);
 		//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
-		//vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
-		//1.从交换链中获取一图像
-
-		//获取命令缓冲
-		//vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
 		if (m_ImagesInFlight[ImageIndex] != VK_NULL_HANDLE) {
 			vkWaitForFences(m_Device, 1, &m_ImagesInFlight[ImageIndex], VK_TRUE, UINT64_MAX);
 		}
 		m_ImagesInFlight[ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
-		//2.提交命令缓冲区
+		//2.提交命令缓冲区Ad
 		VkSubmitInfo SubmitInfo = {};
 		SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1795,7 +1795,8 @@ private:
 	//每个绑定都会通过VkDescriptorSetLayoutBinding结构体描述
 	void __createDescritorSetLayout()
 	{
-		//UBO描述符
+		//在创建描述符集对象之前，需要定义布局绑定。 
+		//UBO布局绑定
 		VkDescriptorSetLayoutBinding  UBOLayoutBinding = {};
 		UBOLayoutBinding.binding = 0;                                         //着色器中使用的binding
 		UBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;  //指定着色器中描述符类型
@@ -1803,11 +1804,11 @@ private:
 		UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;             //指定描述符在着色器哪个阶段杯引用，这里仅在顶点着色器中使用描述符
 		UBOLayoutBinding.pImmutableSamplers = nullptr;                        //与图像采样的描述符有关
 
-		//另一个描述符：组合图像取样器(combined image sampler)
+		//另一个布局绑定：组合图像取样器(combined image sampler)
 		VkDescriptorSetLayoutBinding SamplerLayoutBinding{};
 		SamplerLayoutBinding.binding = 1;
 		SamplerLayoutBinding.descriptorCount = 1;
-		SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; //如果指定的描述符类型 descriptorType 是 VK_DESCRIPTOR_TYPE_SAMPLER 或 VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER，则该字段用于初始化一组不可变的采样器。 如果 descriptorType 不是这些描述符类型之一，则忽略此字段（pImmutableSamplers）。 一旦不可变的采样器被绑定，它们就不能再次被绑定到集合布局中。 当此字段为 NULL 时，采样器槽就是动态的，采样器句柄必须使用此布局绑定到描述符集。
 		SamplerLayoutBinding.pImmutableSamplers = nullptr;
 		//指定在片段着色器中使用组合图像采样器描述符
 		SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1818,6 +1819,7 @@ private:
 		layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
 		layoutInfo.pBindings = bindings.data();
 
+		//实现描述符集布局 
 		if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor set layout!");
 		}
@@ -1839,7 +1841,7 @@ private:
 		}
 	}
 
-	//更新uniform数据
+	//更新uniform数据，更新描述符集，从而将描述符集与资源信息关联起来
 	//该函数会在每一帧中创建新的变换矩阵以确保几何图形旋转。我们需要引入新的头文件使用该功能：
 	void __updateUniformBuffer(uint32_t vCurrentImage)
 	{
@@ -1902,14 +1904,15 @@ private:
 
 		m_DescriptorSets.resize(m_SwapChainImages.size());
 		//不需要明确清理描述符集合，因为它们会在描述符对象池销毁的时候自动清
+		////从描述符池分配描述符集对象
 		if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to allocate descriptor set!");
 		}
 
+		//描述符集合分配好之后，配置描述符，更新描述符集，从而将描述符集与资源信息关联起来
 		for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 		{
-			//描述符集合分配好之后，配置描述符
 			VkDescriptorBufferInfo BufferInfo{};
 			BufferInfo.buffer = m_UniformBuffers[i];
 			BufferInfo.offset = 0;
@@ -1938,6 +1941,7 @@ private:
 			descriptorWrites[1].descriptorCount = 1;     //指定描述多少描述符需要被更新
 			descriptorWrites[1].pImageInfo = &imageInfo; //指定描述符引用的图像数据
 
+			//更新描述符集，从而将描述符集与资源信息关联起来
 			vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 
 			////现在需要更新__createCommandBuffers函数，使用cmdBindDescriptorSets将描述符集合绑定到实际的着色器的描述符中：
@@ -1996,6 +2000,7 @@ private:
 	void __createImage(uint32_t vWidth, uint32_t vHeight, uint32_t vMipLevels, VkSampleCountFlagBits vNumSamples,VkFormat vFormat, VkImageTiling vTiling, VkImageUsageFlags vUsage,
 		VkMemoryPropertyFlags vProperties, VkImage& vImage, VkDeviceMemory& vImageMemory)
 	{
+		//1.创建图像对象
 		//本可以通过着色器访问缓冲区中像素值，但在VuklKam中最好使用image对象访问缓冲区，可以快速检索颜色
 		VkImageCreateInfo ImageCreateInfo = {};
 		ImageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -2006,10 +2011,10 @@ private:
 		ImageCreateInfo.mipLevels = vMipLevels;
 		ImageCreateInfo.arrayLayers = 1;
 		ImageCreateInfo.format = vFormat;         //指定图像格式，但必须保证缓冲区纹素与像素一样的格式，否则copy失败
-		ImageCreateInfo.tiling = vTiling;          //纹素基于具体的实现来定义布局，以实现最佳访问,其中，不能在以后修改，如何需要在内存图像中更直接访问纹素，必须使用VK_IMAGE_TILING_LINEAR（纹素基于行主序的布局，如pixels数组）
+		ImageCreateInfo.tiling = vTiling;          //纹素基于具体的实现来定义布局，以实现最佳访问,其中，不能在以后修改，如何需要在内存图像中更直接访问纹素，必须使用VK_IMAGE_TILING_LINEAR（纹素基于行主序的布局，如pixels数组）并且必须是以下两个枚举值之一：VK_IMAGE_TILING_OPTIMAL 或 VK_IMAGE_TILING_LINEAR。 
 		ImageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; //GPU不能使用，第一个变换将丢弃纹素，在这里几乎灭有必要在第一次转换时保留纹素
 		ImageCreateInfo.usage = vUsage; //图像将会被用作缓冲区copy目标，这里图像作为传输目的地，此外希望从着色器中访问图像对mesh进行着色
-		ImageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;   //图像会在一个队列簇中使用：支持图形或者传输操作
+		ImageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;   //图像会在一个队列簇中使用：支持图形或者传输操作， 这必须是以下值之一：VkSharingMode 枚举中的 VK_SHARING_MODE_EXCLUSIVE 或 VK_SHARING_MODE_CONCURRENT。
 		ImageCreateInfo.samples = vNumSamples;           //标志位与多重采样相关。这仅仅适用于作为附件的图像，所以我们坚持一个采样数值。与稀疏图像相关的图像有一些可选的标志
 		ImageCreateInfo.flags = 0;
 
@@ -2017,19 +2022,22 @@ private:
 			throw std::runtime_error("failed to create image!");
 		}
 
-		//为图像工作分配内存
+		//2.为图像工作分配内存
 		VkMemoryRequirements MemoryRequirements;
+	   //2.1获取内存要求
 		vkGetImageMemoryRequirements(m_Device, vImage, &MemoryRequirements);
-
+		//2.2确定内存类型
 		VkMemoryAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = MemoryRequirements.size;
 		allocInfo.memoryTypeIndex = __findMemoryType(MemoryRequirements.memoryTypeBits, vProperties);
 
+		//2.3分配设备内存
 		if (vkAllocateMemory(m_Device, &allocInfo, nullptr, &vImageMemory) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate image memory!");
 		}
 
+		//2.4绑定分配的内存
 		vkBindImageMemory(m_Device, vImage, vImageMemory, 0);
 	}
 
