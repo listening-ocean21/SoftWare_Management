@@ -1194,15 +1194,17 @@ namespace test5
 
 		//绘制步骤：需要同步操作，栅栏（用于应用程序与渲染操作进行同步）或者信号量（用于在命令队列内或者跨命令队列同步操作）实现同步
 		//1.首先，从交换链中获取一图像
-		//2.从帧缓冲中使用作为附件的图像执行命令缓冲区中的命令
+		//2.从帧缓冲中使用作为附件的图像执行命令缓冲区中的命令NDLE,
 		//3.渲染后的图像返回交换链
+		//为什么需要同步？以上三个步骤都是异步处理的，没有一定的顺序执行，实际上每一步都需要上一步的结果才能运行，因此需要设置信号量来同步
 		void __drawFrame()
 		{
+			//等前一帧完成
 			vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
 			uint32_t ImageIndex;
-			//重建交换链
-			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, std::numeric_limits<uint64_t>::max(), m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
+			//1.首先，从交换链中获取一图像
+			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
 			if (Result == VK_ERROR_OUT_OF_DATE_KHR)  //VK_ERROR_OUT_OF_DATE_KHR：交换链不能继续使用。通常发生在窗口大小改变后
 			{
 				__recreateSwapChain();
@@ -1213,21 +1215,21 @@ namespace test5
 				throw std::runtime_error("failed to acquire SwapChain Image!");
 			}
 
-			//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
-			//vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
-			//1.从交换链中获取一图像
+			__updateUniformBuffer(ImageIndex);
 
-			//获取命令缓冲
-			//vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
+			//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
+			//核验当前帧是否使用了这个图像
 			if (m_ImagesInFlight[ImageIndex] != VK_NULL_HANDLE) {
 				vkWaitForFences(m_Device, 1, &m_ImagesInFlight[ImageIndex], VK_TRUE, UINT64_MAX);
 			}
+			//标价当前帧正在使用这个图像
 			m_ImagesInFlight[ImageIndex] = m_InFlightFences[m_CurrentFrame];
 
-			//2.提交命令缓冲区
+			//2.提交命令缓冲到图形队列
 			VkSubmitInfo SubmitInfo = {};
 			SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
+			//该信号量标记一个图像已经获取到且准备渲染就绪，WaitStages表示管线在那个阶段等待
 			VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
 			VkPipelineStageFlags WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 			SubmitInfo.waitSemaphoreCount = 1;
@@ -1238,15 +1240,17 @@ namespace test5
 			SubmitInfo.commandBufferCount = 1;
 			SubmitInfo.pCommandBuffers = &m_CommandBuffers[ImageIndex];
 
-			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore
+			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore：渲染已经完成可以呈现了
 			VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
 			SubmitInfo.signalSemaphoreCount = 1;
 			SubmitInfo.pSignalSemaphores = SignalSemaphores;
 
+			//重置来解除标记
 			vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
-			//向图像队列提交命令缓冲区
-			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+			//将命令缓冲区提交到图形队列
+			//当命令缓冲完成执行的时候应该标记的栅栏。我们可以用这个来标记一个帧已经完成了
+			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to submit draw command buffer!");
 			}
 
@@ -1264,8 +1268,7 @@ namespace test5
 			PresentInfo.pImageIndices = &ImageIndex;
 			//PresentInfo.pResults = nullptr;
 
-			//不完全匹配时重建交换链
-			//提交请求呈现交换链中的图像
+			//提交请求呈现图像给交换链
 			Result = vkQueuePresentKHR(m_PresentQueue, &PresentInfo);
 			if (Result == VK_ERROR_OUT_OF_DATE_KHR || Result == VK_SUBOPTIMAL_KHR || m_WindowResized) {
 				m_WindowResized = false;
@@ -1276,8 +1279,15 @@ namespace test5
 			}
 
 			//开始绘制下一帧之前明确的等待presentation完成:
+			//该程序在drawFrame方法中快速地提交工作，但是实际上却不检查这些工作是否完成了。如果CPU提交的工作比GPU能处理的快，那么队列会慢慢被工作填充满
+			//解决方法：1.可以使用在drawFrame最后等待工作完成
 			//vkQueueWaitIdle(m_PresentQueue);
+			//2.设置最大并发处理帧数，为每一帧设置信号量
+			//const int MAX_FRAMES_IN_FLIGHT = 2;
+			//std::vector<VkSemaphore> imageAvailableSemaphores;
+			//std::vector<VkSemaphore> renderFinishedSemaphores;
 
+			//为了每次使用正确配对的信号量；我们要跟踪当前帧，这里设置一个帧索引：
 			m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		}
 
