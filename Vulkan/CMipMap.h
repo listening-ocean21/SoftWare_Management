@@ -1814,7 +1814,7 @@ private:
 		static auto StartTime = std::chrono::high_resolution_clock::now();
 
 		auto CurrentTime = std::chrono::high_resolution_clock::now();
-		float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count() / 1000.0f;
+		float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count();
 
 		UniformBufferObject UBO = {};
 		UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));

@@ -444,7 +444,7 @@ private:
 		{
 			vkDestroyBuffer(m_Device, m_UniformBuffers[i], nullptr);
 			vkFreeMemory(m_Device, m_UniformBuffersMemory[i], nullptr);
-			vkDestroyFence(m_Device, m_ImagesInFlight[i], nullptr);
+			//vkDestroyFence(m_Device, m_ImagesInFlight[i], nullptr);
 		}
 
 		vkDestroyImage(m_Device, m_TextureImage, nullptr);
@@ -1244,7 +1244,7 @@ private:
 		GraphicsPipelineCreateInfo.subpass = 0;
 		//可以通过已经存在的管线创建新的图形管线（功能相同，节约内存消耗）
 		GraphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
-		GraphicsPipelineCreateInfo.basePipelineIndex = -1;
+		GraphicsPipelineCreateInfo.basePipelineIndex = -1; 
 
 		//创建图形管线
 		if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &GraphicsPipelineCreateInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
@@ -1863,10 +1863,10 @@ private:
 		static auto StartTime = std::chrono::high_resolution_clock::now();
 
 		auto CurrentTime = std::chrono::high_resolution_clock::now();
-		float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count() / 1000.0f;
+		float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count();
 
 		UniformBufferObject UBO = {};
-		UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		//glm::lookAt 函数以眼睛位置，中心位置和上方向为参数。
 		UBO.ViewMatrix = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		//选择使用FOV为45度的透视投影。其他参数是宽高比，近裁剪面和远裁剪面。重要的是使用当前的交换链扩展来计算宽高比，以便在窗体调整大小后参考最新的窗体宽度和高度。
@@ -1876,6 +1876,7 @@ private:
 
 		//以将UBO中的数据复制到uniform缓冲区
 		void* Data;
+		//映射设备内存
 		vkMapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage], 0, sizeof(UBO), 0, &Data);
 		memcpy(Data, &UBO, sizeof(UBO));
 		vkUnmapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage]);

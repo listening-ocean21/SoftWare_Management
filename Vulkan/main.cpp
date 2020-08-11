@@ -1,5 +1,5 @@
-#include "CTextureImage.h"
-using namespace test9;
+#include "CMultiSample.h"
+//using namespace test9;
 
 int main() {
 	CTest app;
