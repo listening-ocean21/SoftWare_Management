@@ -39,8 +39,8 @@
 	const int HEIGHT = 600;
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 
-	const std::string MODEL_PATH = "viking_room.obj";
-	const std::string TEXTURE_PATH = "viking_room.png";
+	const std::string MODEL_PATH = "./Images/viking_room.obj";
+	const std::string TEXTURE_PATH = "./Images/viking_room.png";
 
 	//SDK通过请求VK_LAYER_LUNARG_standard_validaction层，
 	//来隐式的开启有所关于诊断layers，
@@ -113,7 +113,7 @@
 		glm::vec2 TexCoord;
 
 		//一旦数据被提交到GPU的显存中，就需要告诉Vulkan传递到顶点着色器中数据的格式。有两个结构体用于描述这部分信息
-		//1.顶点数据绑定:
+		//1.顶点绑定:
 		static VkVertexInputBindingDescription getBindingDescription()
 		{
 			VkVertexInputBindingDescription BindingDescription = {};
@@ -1058,8 +1058,8 @@
 		//创建图形管线
 		void __createGraphicsPipelines()
 		{
-			auto VertShaderCode = __readFile("vert.spv");
-			auto FragShaderCode = __readFile("frag.spv");
+			auto VertShaderCode = __readFile("./Shaders/vert.spv");
+			auto FragShaderCode = __readFile("./Shaders/frag.spv");
 
 			VkShaderModule VertShaderModule = __createShaderModule(VertShaderCode);
 			VkShaderModule FragShaderModule = __createShaderModule(FragShaderCode);

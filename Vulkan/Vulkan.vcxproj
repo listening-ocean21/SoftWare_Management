@@ -151,8 +151,8 @@
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
-    <None Include="shader.frag" />
-    <None Include="shader.vert" />
+    <None Include="Shaders\shader.frag" />
+    <None Include="Shaders\shader.vert" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CApplicationTest.h">
@@ -197,10 +197,14 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="C:\Users\32239\AppData\Local\Temp\boy.jpg" />
     <Image Include="viking_room.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Vulkan.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

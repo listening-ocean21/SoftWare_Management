@@ -806,8 +806,8 @@ private:
 	//创建图形管线
 	void __createGraphicsPipelines()
 	{
-		auto VertShaderCode = __readFile("vert.spv");
-		auto FragShaderCode = __readFile("frag.spv");
+		auto VertShaderCode = __readFile("./Shaders/vert.spv");
+		auto FragShaderCode = __readFile("./Shaders/frag.spv");
 
 		VkShaderModule VertShaderModule = __createShaderModule(VertShaderCode);
 		VkShaderModule FragShaderModule = __createShaderModule(FragShaderCode);

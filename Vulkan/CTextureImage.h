@@ -1019,8 +1019,8 @@ namespace test9
 		//创建图形管线
 		void __createGraphicsPipelines()
 		{
-			auto VertShaderCode = __readFile("vert.spv");
-			auto FragShaderCode = __readFile("frag.spv");
+			auto VertShaderCode = __readFile("./Shaders/vert.spv");
+			auto FragShaderCode = __readFile("./Shaders/frag.spv");
 
 			VkShaderModule VertShaderModule = __createShaderModule(VertShaderCode);
 			VkShaderModule FragShaderModule = __createShaderModule(FragShaderCode);
@@ -1843,7 +1843,7 @@ namespace test9
 			int TexWidth, TexHeight, TexChannels;
 
 			//STBI_rgb_alpha值强制加载图片的alpha通道，即使没有改通道值，像素逐行排列，每个像素有四个字节
-			stbi_uc* Pixels = stbi_load("./boy.jpg", &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
+			stbi_uc* Pixels = stbi_load("./Images/boy.jpg", &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
 			VkDeviceSize ImageSize = TexWidth * TexHeight * 4;
 
 			if (!Pixels) {
