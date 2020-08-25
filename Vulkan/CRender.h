@@ -36,7 +36,7 @@ const bool enableValidationLayers = true;
 
 //具体的Vulkan实现可能对窗口系统进行了支持，但这并不意味着所有平台的Vulkan实现都支持同样的特性
 //需要扩展isDeviceSuitable函数来确保设备可以在我们创建的表面上显示图像
-struct EQueueFamilyIndices
+struct SQueueFamilyIndices
 {	//支持绘制指令的队列簇和支持表现的队列簇
 	int GraphicsFamily = -1;
 	int PresentFamily = -1;
@@ -48,7 +48,7 @@ struct EQueueFamilyIndices
 };
 
 //检查交换链的细节：1.surface特性  2.surface格式 3.可用的呈现模式
-struct ESwapChainSupportDetails {
+struct SSwapChainSupportDetails {
 	VkSurfaceCapabilitiesKHR Capablities;
 	std::vector<VkSurfaceFormatKHR> SurfaceFormats;
 	std::vector<VkPresentModeKHR> PresentModes;
@@ -90,7 +90,7 @@ public:
 		__cleanUp();
 	}
 private:
-	GLFWwindow * m_pWindow;
+	GLFWwindow * pWindow;
 	VkInstance m_Instance;
 
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
@@ -145,7 +145,7 @@ private:
 		//禁止窗口大小改变 
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-		m_pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
+		pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
 	}
 
 	//创建vulkan实例
@@ -170,7 +170,7 @@ private:
 	//循环渲染
 	void __mainLoop()
 	{
-		while (!glfwWindowShouldClose(m_pWindow))
+		while (!glfwWindowShouldClose(pWindow))
 		{
 			glfwPollEvents();
 			//函数中所有的操作都是异步的。意味着当程序退出mainLoop，
@@ -218,7 +218,7 @@ private:
 		vkDestroySurfaceKHR(m_Instance, m_WindowSurface, nullptr);
 		vkDestroyInstance(m_Instance, nullptr);
 
-		glfwDestroyWindow(m_pWindow);
+		glfwDestroyWindow(pWindow);
 		glfwTerminate();
 	}
 
@@ -309,7 +309,7 @@ private:
 	void __createLogicalDevice()
 	{
 		//创建队列
-		EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 
 		//描述队列蔟中预定申请的队列个数,创建支持表现和显示功能
 		std::vector<VkDeviceQueueCreateInfo> QueueCreateInfos;
@@ -362,7 +362,7 @@ private:
 	//判断是否支持gPU函数
 	bool __isDeviceSuitable(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
+		SQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
 
 		//是否支持交换链支持
 		bool DeviceExtensionSupport = __checkDeviceExtensionSupport(vDevice);
@@ -370,7 +370,7 @@ private:
 		bool SwapChainAdequate = false;
 		if (DeviceExtensionSupport)
 		{
-			ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
+			SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
 			//返回真，说明交换链的能力满足需要
 			SwapChainAdequate = !SwapChainSupport.SurfaceFormats.empty() && !SwapChainSupport.PresentModes.empty();
 		}
@@ -379,9 +379,9 @@ private:
 
 
 	//检测设备中支持的队列蔟
-	EQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
+	SQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices;
+		SQueueFamilyIndices  Indices;
 
 		//设备队列族的个数
 		uint32_t QueueFamilyCount = 0;
@@ -502,7 +502,7 @@ private:
 	//Surface
 	void __createSurface()
 	{
-		if (glfwCreateWindowSurface(m_Instance, m_pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
+		if (glfwCreateWindowSurface(m_Instance, pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create window surface!");
 		}
 	}
@@ -527,9 +527,9 @@ private:
 	}
 
 	//检查交换链细节
-	ESwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
+	SSwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
 	{
-		ESwapChainSupportDetails Details;
+		SSwapChainSupportDetails Details;
 		//查询基础表面特性
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vPhsicalDevice, m_WindowSurface, &Details.Capablities);
 
@@ -619,7 +619,7 @@ private:
 	void __createSwapShain()
 	{
 		//查询可以支持交换链的
-		ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
+		SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
 		VkSurfaceFormatKHR SurfaceFormat = __chooseSwapSurfaceFormat(SwapChainSupport.SurfaceFormats);
 		VkPresentModeKHR   PresentMode = __chooseSwapPresentMode(SwapChainSupport.PresentModes);
 		VkExtent2D         Extent = __chooseSwapExtent(SwapChainSupport.Capablities);
@@ -644,7 +644,7 @@ private:
 
 		//指定多个队列簇使用交换链图像的方式
 		//这里通过图形队列在交换链图像上进行绘制操作，然后将图像提交给呈现队列进行显示
-		EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 		uint32_t QueueFamilyIndices[] = { (uint32_t)Indices.GraphicsFamily, (uint32_t)Indices.PresentFamily };
 
 		//图形和呈现不是同一个队列族，使用协同模式来避免处理图像所有权问题；否则就不能使用
@@ -832,12 +832,12 @@ private:
 		VkPipelineShaderStageCreateInfo ShaderStages[] = { VertShaderStageInfo, FragShaderStageInfo };
 
 		//顶点信息
-		VkPipelineVertexInputStateCreateInfo  PipelineVertexInputStateCreateInfo = {};
-		PipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		PipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
-		PipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = nullptr;
-		PipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
-		PipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = nullptr;
+		VkPipelinSVertexInputStateCreateInfo  PipelinSVertexInputStateCreateInfo = {};
+		PipelinSVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		PipelinSVertexInputStateCreateInfo.vertexBindingDescriptionCount = 0;
+		PipelinSVertexInputStateCreateInfo.pVertexBindingDescriptions = nullptr;
+		PipelinSVertexInputStateCreateInfo.vertexAttributeDescriptionCount = 0;
+		PipelinSVertexInputStateCreateInfo.pVertexAttributeDescriptions = nullptr;
 
 		//顶点数据的集合图元拓扑结构和是否启用顶点索重新开始图元
 		VkPipelineInputAssemblyStateCreateInfo  PipelineInputAssemblyStateCreateInfo = {};
@@ -932,7 +932,7 @@ private:
 		GraphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		GraphicsPipelineCreateInfo.stageCount = 2;
 		GraphicsPipelineCreateInfo.pStages = ShaderStages;
-		GraphicsPipelineCreateInfo.pVertexInputState = &PipelineVertexInputStateCreateInfo;
+		GraphicsPipelineCreateInfo.pVertexInputState = &PipelinSVertexInputStateCreateInfo;
 		GraphicsPipelineCreateInfo.pInputAssemblyState = &PipelineInputAssemblyStateCreateInfo;
 		GraphicsPipelineCreateInfo.pViewportState = &PipelineViewportStateCreateInfo;
 		GraphicsPipelineCreateInfo.pRasterizationState = &PipelineRasterizationStateCreateInfo;
@@ -989,7 +989,7 @@ private:
 	void __createCommandPool()
 	{
 		//每个指令池对象分配的指令缓冲对象只能提交给一个特定类型的队列，这里使用绘制指令
-		EQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
 
 		VkCommandPoolCreateInfo CommandPoolCreateInfo = {};
 		CommandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;

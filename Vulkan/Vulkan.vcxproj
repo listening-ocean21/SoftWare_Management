@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -139,22 +139,37 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="CSwapChain.h">
+    <ClCompile Include="CCamera.cpp" />
+    <ClCompile Include="Head\6_VertexBuffer\CVertexBuffer.h" />
+    <ClCompile Include="Head\7_IndexBuffer\CIndexBuffer.h" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Source\1_Device\CLogicalDevice.cpp" />
+    <ClCompile Include="Source\2_Buffer\CBuffer.cpp" />
+    <ClCompile Include="Source\3_CommandBuffer\CCommandBuffer.cpp" />
+    <ClCompile Include="Source\6_VertexBuffer\CVertexBuffer.cpp" />
+    <ClCompile Include="Source\7_IndexBuffer\CIndexBuffer.cpp" />
+    <ClCompile Include="Test.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
+    <None Include="Shaders\DepthMap.frag" />
+    <None Include="Shaders\DepthMap.vert" />
+    <None Include="Shaders\DepthMapFrag.frag" />
+    <None Include="Shaders\DepthMapVert.vert" />
+    <None Include="Shaders\SceneFrag.frag" />
+    <None Include="Shaders\SceneVert.vert" />
     <None Include="Shaders\shader.frag" />
-    <None Include="Shaders\shader.vert" />
+    <None Include="Shaders\ShadowMap.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera\CCamera.h" />
     <ClInclude Include="CApplicationTest.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -167,7 +182,6 @@
     <ClInclude Include="CFile.h" />
     <ClInclude Include="CFrameBuffer.h" />
     <ClInclude Include="CExtraBuffer.h" />
-    <ClInclude Include="CLoadModel.h" />
     <ClInclude Include="CMipMap.h" />
     <ClInclude Include="CMultiSample.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
@@ -189,7 +203,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClInclude>
-    <ClInclude Include="CTextureImage.h" />
     <ClInclude Include="CVertexShader.h" />
     <ClInclude Include="CWindowSurface.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -197,14 +210,21 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="Head\1_Device\CLogicalDevice.h" />
+    <ClInclude Include="Head\2_Buffer\CBuffer.h" />
+    <ClInclude Include="Head\3_CommandBuffer\CCommandBuffer.h" />
+    <ClInclude Include="Head\4_Queue\CVKQueue.h" />
+    <ClInclude Include="Head\5_Synchronization\CSynchronization.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="ShadowMap\CShadowMap.h" />
+    <ClInclude Include="ShadowMap\VulkanBuffer.hpp" />
+    <ClInclude Include="ShadowMap\VulkanInitializers.hpp" />
+    <ClInclude Include="Source\4_Queue\CVKQueue.cpp" />
+    <ClInclude Include="Source\5_Synchronization\CSynchronization.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="C:\Users\32239\AppData\Local\Temp\boy.jpg" />
-    <Image Include="viking_room.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="Vulkan.rc" />
+    <Image Include="Images\boy.jpg" />
+    <Image Include="Images\viking_room.png" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

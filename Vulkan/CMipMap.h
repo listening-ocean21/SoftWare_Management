@@ -88,7 +88,7 @@ void destroyDebugUtilsMessengerEXT(VkInstance vInstance,
 
 //具体的Vulkan实现可能对窗口系统进行了支持，但这并不意味着所有平台的Vulkan实现都支持同样的特性
 //需要扩展isDeviceSuitable函数来确保设备可以在我们创建的表面上显示图像
-struct EQueueFamilyIndices
+struct SQueueFamilyIndices
 {	//支持绘制指令的队列簇和支持表现的队列簇
 	int GraphicsFamily = -1;
 	int PresentFamily = -1;
@@ -100,14 +100,14 @@ struct EQueueFamilyIndices
 };
 
 //检查交换链的细节：1.surface特性  2.surface格式 3.可用的呈现模式
-struct ESwapChainSupportDetails {
+struct SSwapChainSupportDetails {
 	VkSurfaceCapabilitiesKHR Capablities;
 	std::vector<VkSurfaceFormatKHR> SurfaceFormats;
 	std::vector<VkPresentModeKHR> PresentModes;
 };
 
 //顶点数据
-struct EVertex {
+struct SVertex {
 	glm::vec3 Pos;
 	glm::vec3 Color;
 	glm::vec2 TexCoord;
@@ -120,7 +120,7 @@ struct EVertex {
 
 		//定数据条目之间的间隔字节数以及是否每个顶点之后或者每个instance之后移动到下一个条目
 		BindingDescription.binding = 0;
-		BindingDescription.stride = sizeof(EVertex);
+		BindingDescription.stride = sizeof(SVertex);
 		BindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;  // 移动到每个顶点后的下一个数据条目
 		return BindingDescription;
 	}
@@ -135,31 +135,31 @@ struct EVertex {
 		AttributeDescriptions[0].binding = 0;
 		AttributeDescriptions[0].location = 0;    //与VertexShader相对应，Pos属性
 		AttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;  //32bit单精度数据
-		AttributeDescriptions[0].offset = offsetof(EVertex, Pos);
+		AttributeDescriptions[0].offset = offsetof(SVertex, Pos);
 
 		//Color属性
 		AttributeDescriptions[1].binding = 0;
 		AttributeDescriptions[1].location = 1; //Color属性
 		AttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-		AttributeDescriptions[1].offset = offsetof(EVertex, Color);
+		AttributeDescriptions[1].offset = offsetof(SVertex, Color);
 
 		//TexCoord属性
 		AttributeDescriptions[2].binding = 0;
 		AttributeDescriptions[2].location = 2;
 		AttributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-		AttributeDescriptions[2].offset = offsetof(EVertex, TexCoord);
+		AttributeDescriptions[2].offset = offsetof(SVertex, TexCoord);
 		return AttributeDescriptions;
 	}
 
-	bool operator==(const EVertex& other) const
+	bool operator==(const SVertex& other) const
 	{
 		return Pos == other.Pos && Color == other.Color && TexCoord == other.TexCoord;
 	}
 };
 
 namespace std {
-	template<> struct hash<EVertex> {
-		size_t operator()(EVertex const& vertex) const
+	template<> struct hash<SVertex> {
+		size_t operator()(SVertex const& vertex) const
 		{
 			return ((hash<glm::vec3>()(vertex.Pos) ^
 				(hash<glm::vec3>()(vertex.Color) << 1)) >> 1) ^
@@ -184,7 +184,7 @@ public:
 		__cleanUp();
 	}
 private:
-	GLFWwindow * m_pWindow;
+	GLFWwindow * pWindow;
 	VkInstance m_Instance;
 
 	VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
@@ -269,7 +269,7 @@ private:
 	VkDeviceMemory m_DepthImageMemory;
 	VkImageView m_DepthImageView;
 
-	std::vector<EVertex> Vertices;
+	std::vector<SVertex> Vertices;
 	std::vector<uint32_t> Indices;
 
 	//mip级数
@@ -282,12 +282,12 @@ private:
 		//由于GLFW库最初是为了OpenGL设计，需要显式设置GLFW阻止它自动创建OpenGL上下文
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-		m_pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
+		pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
 		//GLFW允许我们使用glfwSetWindowUserPointer将任意指针存储在窗体对象中，
 		//因此可以指定静态类成员调用glfwGetWindowUserPointer返回原始的实例对象
-		glfwSetWindowUserPointer(m_pWindow, this);
+		glfwSetWindowUserPointer(pWindow, this);
 		//会在窗体发生大小变化的时候被事件回调
-		glfwSetFramebufferSizeCallback(m_pWindow, CTest::__framebufferResizeCallback);
+		glfwSetFramebufferSizeCallback(pWindow, CTest::__framebufferResizeCallback);
 	}
 
 	//回调函数,必须为静态函数，才能作为回调函数
@@ -325,7 +325,7 @@ private:
 		__createTextureSampler();
 		//填充顶点和索引数据
 		__loadModel();
-		__createVertexBuffer();
+		__creatSVertexBuffer();
 		__createIndexBuffer();
 		__createUniformBuffer();
 		//创建描述符池
@@ -342,7 +342,7 @@ private:
 		//当窗口最小化时，窗口的帧缓冲实际大小也为0，设置应用程序在窗口最小化后停止渲染，直到窗口重新可见时重建交换链
 		if (Width == 0 || Height == 0)
 		{
-			glfwGetFramebufferSize(m_pWindow, &Width, &Height);
+			glfwGetFramebufferSize(pWindow, &Width, &Height);
 			glfwWaitEvents();
 		}
 		vkDeviceWaitIdle(m_Device);
@@ -359,7 +359,7 @@ private:
 	//循环渲染
 	void __mainLoop()
 	{
-		while (!glfwWindowShouldClose(m_pWindow))
+		while (!glfwWindowShouldClose(pWindow))
 		{
 			glfwPollEvents();
 			//函数中所有的操作都是异步的。意味着当程序退出mainLoop，
@@ -449,7 +449,7 @@ private:
 		vkDestroySurfaceKHR(m_Instance, m_WindowSurface, nullptr);
 		vkDestroyInstance(m_Instance, nullptr);
 
-		glfwDestroyWindow(m_pWindow);
+		glfwDestroyWindow(pWindow);
 		glfwTerminate();
 	}
 
@@ -540,7 +540,7 @@ private:
 	void __createLogicalDevice()
 	{
 		//创建队列
-		EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 
 		//描述队列蔟中预定申请的队列个数,创建支持表现和显示功能
 		std::vector<VkDeviceQueueCreateInfo> QueueCreateInfos;
@@ -594,7 +594,7 @@ private:
 	//判断是否支持gPU函数
 	bool __isDeviceSuitable(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
+		SQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
 
 		//是否支持交换链支持
 		bool DeviceExtensionSupport = __checkDeviceExtensionSupport(vDevice);
@@ -606,7 +606,7 @@ private:
 		bool SwapChainAdequate = false;
 		if (DeviceExtensionSupport)
 		{
-			ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
+			SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
 			//返回真，说明交换链的能力满足需要
 			SwapChainAdequate = !SwapChainSupport.SurfaceFormats.empty() && !SwapChainSupport.PresentModes.empty();
 		}
@@ -614,9 +614,9 @@ private:
 	}
 
 	//检测设备中支持的队列蔟
-	EQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
+	SQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices;
+		SQueueFamilyIndices  Indices;
 
 		//设备队列族的个数
 		uint32_t QueueFamilyCount = 0;
@@ -737,7 +737,7 @@ private:
 	//Surface
 	void __createSurface()
 	{
-		if (glfwCreateWindowSurface(m_Instance, m_pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
+		if (glfwCreateWindowSurface(m_Instance, pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create window surface!");
 		}
 	}
@@ -762,9 +762,9 @@ private:
 	}
 
 	//检查交换链细节
-	ESwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
+	SSwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
 	{
-		ESwapChainSupportDetails Details;
+		SSwapChainSupportDetails Details;
 		//查询基础表面特性
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vPhsicalDevice, m_WindowSurface, &Details.Capablities);
 
@@ -833,7 +833,7 @@ private:
 	VkExtent2D __chooseSwapExtent(const VkSurfaceCapabilitiesKHR &vSurfaceCapabilities)
 	{
 		int Width, Height;
-		glfwGetWindowSize(m_pWindow, &Width, &Height);
+		glfwGetWindowSize(pWindow, &Width, &Height);
 
 		if (vSurfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
 		{
@@ -852,7 +852,7 @@ private:
 	void __createSwapShain()
 	{
 		//查询可以支持交换链的
-		ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
+		SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
 		VkSurfaceFormatKHR SurfaceFormat = __chooseSwapSurfaceFormat(SwapChainSupport.SurfaceFormats);
 		VkPresentModeKHR   PresentMode = __chooseSwapPresentMode(SwapChainSupport.PresentModes);
 		VkExtent2D         Extent = __chooseSwapExtent(SwapChainSupport.Capablities);
@@ -877,7 +877,7 @@ private:
 
 		//指定多个队列簇使用交换链图像的方式
 		//这里通过图形队列在交换链图像上进行绘制操作，然后将图像提交给呈现队列进行显示
-		EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 		uint32_t QueueFamilyIndices[] = { (uint32_t)Indices.GraphicsFamily, (uint32_t)Indices.PresentFamily };
 
 		//图形和呈现不是同一个队列族，使用协同模式来避免处理图像所有权问题；否则就不能使用
@@ -1087,15 +1087,15 @@ private:
 		VkPipelineShaderStageCreateInfo ShaderStages[] = { VertShaderStageInfo, FragShaderStageInfo };
 
 		//顶点信息
-		auto BindingDescription = EVertex::getBindingDescription();
-		auto AttributeDescription = EVertex::getAttributeDescriptions();
+		auto BindingDescription = SVertex::getBindingDescription();
+		auto AttributeDescription = SVertex::getAttributeDescriptions();
 
-		VkPipelineVertexInputStateCreateInfo  PipelineVertexInputStateCreateInfo = {};
-		PipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		PipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
-		PipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = &BindingDescription;
-		PipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t> (AttributeDescription.size());
-		PipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = AttributeDescription.data();
+		VkPipelinSVertexInputStateCreateInfo  PipelinSVertexInputStateCreateInfo = {};
+		PipelinSVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+		PipelinSVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+		PipelinSVertexInputStateCreateInfo.pVertexBindingDescriptions = &BindingDescription;
+		PipelinSVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t> (AttributeDescription.size());
+		PipelinSVertexInputStateCreateInfo.pVertexAttributeDescriptions = AttributeDescription.data();
 
 		//顶点数据的集合图元拓扑结构和是否启用顶点索重新开始图元
 		VkPipelineInputAssemblyStateCreateInfo  PipelineInputAssemblyStateCreateInfo = {};
@@ -1198,7 +1198,7 @@ private:
 		GraphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		GraphicsPipelineCreateInfo.stageCount = 2;
 		GraphicsPipelineCreateInfo.pStages = ShaderStages;
-		GraphicsPipelineCreateInfo.pVertexInputState = &PipelineVertexInputStateCreateInfo;
+		GraphicsPipelineCreateInfo.pVertexInputState = &PipelinSVertexInputStateCreateInfo;
 		GraphicsPipelineCreateInfo.pInputAssemblyState = &PipelineInputAssemblyStateCreateInfo;
 		GraphicsPipelineCreateInfo.pViewportState = &PipelineViewportStateCreateInfo;
 		GraphicsPipelineCreateInfo.pRasterizationState = &PipelineRasterizationStateCreateInfo;
@@ -1255,7 +1255,7 @@ private:
 	void __createCommandPool()
 	{
 		//每个指令池对象分配的指令缓冲对象只能提交给一个特定类型的队列，这里使用绘制指令
-		EQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
+		SQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
 
 		VkCommandPoolCreateInfo CommandPoolCreateInfo = {};
 		CommandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1467,7 +1467,7 @@ private:
 
 	//创建顶点缓冲,顶点着色器创建之后，使用CPU可见的缓冲作为临时缓冲，使用显卡读取较快的缓冲作为真正的顶点缓冲
 	//新的关联stagingBufferMemory作为内存的stagingBuffer缓冲对象来存放CPU加载的顶点数据。
-	void __createVertexBuffer()
+	void __creatSVertexBuffer()
 	{
 		VkDeviceSize bufferSize = sizeof(Vertices[0]) * Vertices.size();
 
@@ -2100,11 +2100,11 @@ private:
 			throw std::runtime_error(warn + err);
 		}
 
-		std::unordered_map<EVertex, uint32_t> uniqueVertices{};
+		std::unordered_map<SVertex, uint32_t> uniqueVertices{};
 
 		for (const auto& shape : shapes) {
 			for (const auto& index : shape.mesh.indices) {
-				EVertex vertex{};
+				SVertex vertex{};
 
 				vertex.Pos = {
 					Attrib.vertices[3 * index.vertex_index + 0],

@@ -13,9 +13,6 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="资源文件\Textures">
-      <UniqueIdentifier>{cd3fa017-3000-4eb4-8987-f8d22b008175}</UniqueIdentifier>
-    </Filter>
     <Filter Include="资源文件\Models">
       <UniqueIdentifier>{4b76e6bb-0d5f-4434-bcfa-9a714ba8fc07}</UniqueIdentifier>
     </Filter>
@@ -28,21 +25,114 @@
     <Filter Include="资源文件\Shaders\Vert">
       <UniqueIdentifier>{99f50aaf-4128-4ee0-a440-4b812d1b432b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="头文件\ShadowMap">
+      <UniqueIdentifier>{41e537ca-7483-408c-9033-5f82ddab6c88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\Camera">
+      <UniqueIdentifier>{245ed6ac-887f-4f48-8ea6-23595203296d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="资源文件\Images">
+      <UniqueIdentifier>{bbbe0810-ad85-41a7-8b0e-d8f6c2ef5cb2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\2_Buffer">
+      <UniqueIdentifier>{ee436af1-18bc-4b8f-847f-fc2478428e18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\3_CommandBuffer">
+      <UniqueIdentifier>{8c6fd3c2-f56c-409e-9587-8262b8902e4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\1_Device">
+      <UniqueIdentifier>{32095d6b-b04a-4634-9e63-5f4c186d9ef7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\2_Buffer">
+      <UniqueIdentifier>{3c840469-e038-4700-a0ba-6197944e5d9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\1_Device">
+      <UniqueIdentifier>{67135310-9c84-4456-9c23-2ad782fa5db7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\3_CommandBuffer">
+      <UniqueIdentifier>{3410dc59-e379-4a18-8801-1f31e501d656}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\4_Queue">
+      <UniqueIdentifier>{ec996d6e-7436-41e2-9aed-102a3a7460d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\4_Queue">
+      <UniqueIdentifier>{3b756574-9baa-4f24-bbb8-ac44eb2bdbd7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\5_Synchronization">
+      <UniqueIdentifier>{7abab077-8419-4935-aa97-978c0e01332b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\5_Synchronization">
+      <UniqueIdentifier>{83618b2c-f843-43f2-b1b0-d8a16f290f67}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\6_VertexBuffer">
+      <UniqueIdentifier>{8c01acb3-717e-42a8-8e37-fc365387001a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\7_IndexBuffer">
+      <UniqueIdentifier>{202ba26b-952d-45c7-bc47-6d72807c1c50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\6_VertexBuffer">
+      <UniqueIdentifier>{3f4f68d7-4d41-4749-86e7-7d6804d91c4e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\7_IndexBuffer">
+      <UniqueIdentifier>{986948a9-e2f4-452b-91a8-4e4d30c3a3e8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>资源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CSwapChain.h">
-      <Filter>头文件</Filter>
+    <ClCompile Include="CCamera.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Test.cpp">
+      <Filter>资源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\1_Device\CLogicalDevice.cpp">
+      <Filter>源文件\1_Device</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\2_Buffer\CBuffer.cpp">
+      <Filter>源文件\2_Buffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\3_CommandBuffer\CCommandBuffer.cpp">
+      <Filter>源文件\3_CommandBuffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\6_VertexBuffer\CVertexBuffer.cpp">
+      <Filter>源文件\6_VertexBuffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\7_IndexBuffer\CIndexBuffer.cpp">
+      <Filter>源文件\7_IndexBuffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Head\6_VertexBuffer\CVertexBuffer.h">
+      <Filter>头文件\6_VertexBuffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Head\7_IndexBuffer\CIndexBuffer.h">
+      <Filter>头文件\7_IndexBuffer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="Shaders\DepthMap.frag">
+      <Filter>资源文件\Shaders\Frag</Filter>
+    </None>
+    <None Include="Shaders\DepthMapFrag.frag">
+      <Filter>资源文件\Shaders\Frag</Filter>
+    </None>
+    <None Include="Shaders\SceneFrag.frag">
+      <Filter>资源文件\Shaders\Frag</Filter>
+    </None>
     <None Include="Shaders\shader.frag">
       <Filter>资源文件\Shaders\Frag</Filter>
     </None>
-    <None Include="Shaders\shader.vert">
+    <None Include="Shaders\DepthMap.vert">
+      <Filter>资源文件\Shaders\Vert</Filter>
+    </None>
+    <None Include="Shaders\DepthMapVert.vert">
+      <Filter>资源文件\Shaders\Vert</Filter>
+    </None>
+    <None Include="Shaders\SceneVert.vert">
+      <Filter>资源文件\Shaders\Vert</Filter>
+    </None>
+    <None Include="Shaders\ShadowMap.vert">
       <Filter>资源文件\Shaders\Vert</Filter>
     </None>
   </ItemGroup>
@@ -86,12 +176,6 @@
     <ClInclude Include="CDescriptorPoolSets.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="CTextureImage.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="CLoadModel.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="CMipMap.h">
       <Filter>头文件</Filter>
     </ClInclude>
@@ -101,18 +185,46 @@
     <ClInclude Include="resource.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="ShadowMap\CShadowMap.h">
+      <Filter>头文件\ShadowMap</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera\CCamera.h">
+      <Filter>头文件\Camera</Filter>
+    </ClInclude>
+    <ClInclude Include="ShadowMap\VulkanInitializers.hpp">
+      <Filter>头文件\ShadowMap</Filter>
+    </ClInclude>
+    <ClInclude Include="ShadowMap\VulkanBuffer.hpp">
+      <Filter>头文件\ShadowMap</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\1_Device\CLogicalDevice.h">
+      <Filter>头文件\1_Device</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\2_Buffer\CBuffer.h">
+      <Filter>头文件\2_Buffer</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\3_CommandBuffer\CCommandBuffer.h">
+      <Filter>头文件\3_CommandBuffer</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\4_Queue\CVKQueue.cpp">
+      <Filter>源文件\4_Queue</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\4_Queue\CVKQueue.h">
+      <Filter>头文件\4_Queue</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\5_Synchronization\CSynchronization.h">
+      <Filter>头文件\5_Synchronization</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\5_Synchronization\CSynchronization.cpp">
+      <Filter>源文件\5_Synchronization</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="C:\Users\32239\AppData\Local\Temp\boy.jpg">
-      <Filter>资源文件\Textures</Filter>
+    <Image Include="Images\boy.jpg">
+      <Filter>资源文件\Images</Filter>
     </Image>
-    <Image Include="viking_room.png">
-      <Filter>资源文件\Textures</Filter>
+    <Image Include="Images\viking_room.png">
+      <Filter>资源文件\Images</Filter>
     </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="Vulkan.rc">
-      <Filter>资源文件</Filter>
-    </ResourceCompile>
   </ItemGroup>
 </Project>

@@ -25,7 +25,7 @@ const bool enableValidationLayers = false;
 const bool enableValidationLayers = true;
 #endif
 
-struct EQueueFamilyIndices
+struct SQueueFamilyIndices
 {
 	int GraphicsFamily = -1;
 
@@ -216,14 +216,14 @@ private:
 	//判断是否支持gPU函数
 	bool isDeviceSuitable(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices = findQueueFamilies(vDevice);
+		SQueueFamilyIndices  Indices = findQueueFamilies(vDevice);
 		return Indices.isComplete();
 	}
 
 	//检测设备中支持的队列蔟
-	EQueueFamilyIndices findQueueFamilies(VkPhysicalDevice vDevice)
+	SQueueFamilyIndices findQueueFamilies(VkPhysicalDevice vDevice)
 	{
-		EQueueFamilyIndices  Indices;
+		SQueueFamilyIndices  Indices;
 
 		uint32_t QueueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(vDevice, &QueueFamilyCount, nullptr);

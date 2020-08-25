@@ -1072,7 +1072,7 @@ private:
 		SubpassDependency.srcAccessMask = 0;
 		//在颜色附件阶段的操作及涉及颜色附件的读取和写入的操作应该等待。这些设置将阻止转换发生
 		SubpassDependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		SubpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		SubpassDependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 		//创建渲染管道
 		std::array<VkAttachmentDescription, 3> Attachments = { ColorAttachment, DepthAttachment , ColorAttachmentResolve };

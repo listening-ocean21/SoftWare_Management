@@ -20,16 +20,36 @@
 #include <algorithm>
 #include <array>
 
+#include "../Camera/CCamera.h"
+
+#define SHADOWMAP_SIZE  1024
+
 //总体功能
-//1.实现纹理映射，当图像已经有了贴图，就需要图形管线采样，读取纹素
-//2.图像不能直接访问，需要借助图像视图访问纹理图像
-//3.1使用描述符访问图像资源，修改描述符布局，描述符对象池和描述符集合，以包括这样一个组合的图像采样器描述符。完成之后，我们会添加纹理贴图坐标到Vertex数据中，
-//并修改片段着色器从纹理中读取颜色，而不是内插顶点颜色。
-namespace test9
+//实现阴影贴图
+namespace test12
 {
 	const int WIDTH = 800;
 	const int HEIGHT = 600;
 	const int MAX_FRAMES_IN_FLIGHT = 2;
+
+
+	//鼠标移动位置记录
+	float LastX = WIDTH / 2, LastY = HEIGHT / 2;
+	float ZNear = 1.0f, ZFar = 96.0f;
+	//缩放视野
+	float Fov = 45.0f;
+	bool FirstMouse = true;
+
+	float AmbientStrenght = 0.1f;
+	float SpecularStrenght = 0.8f;
+
+	glm::vec3 BaseLight = glm::vec3(1.0f, 1.0f, 1.0f);
+	glm::vec3 LightPos = glm::vec3(1.0f, 1.0f, 1.0f);
+	glm::vec3 LightDirection = glm::vec3(-1.0f, -1.0f, -1.0f);
+	glm::vec3 FlashColor = glm::vec3(1.0f, 1.0f, 1.0f);
+
+	CCamera Camera(glm::vec3(0.0f, 2.0f, 8.0f), glm::radians(-15.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
 	//SDK通过请求VK_LAYER_LUNARG_standard_validaction层，
 	//来隐式的开启有所关于诊断layers，
 	//从而避免明确的指定所有的明确的诊断层。
@@ -76,7 +96,7 @@ namespace test9
 
 	//具体的Vulkan实现可能对窗口系统进行了支持，但这并不意味着所有平台的Vulkan实现都支持同样的特性
 //需要扩展isDeviceSuitable函数来确保设备可以在我们创建的表面上显示图像
-	struct EQueueFamilyIndices
+	struct SQueueFamilyIndices
 	{	//支持绘制指令的队列簇和支持表现的队列簇
 		int GraphicsFamily = -1;
 		int PresentFamily = -1;
@@ -88,74 +108,181 @@ namespace test9
 	};
 
 	//检查交换链的细节：1.surface特性  2.surface格式 3.可用的呈现模式
-	struct ESwapChainSupportDetails {
+	struct SSwapChainSupportDetails {
 		VkSurfaceCapabilitiesKHR Capablities;
 		std::vector<VkSurfaceFormatKHR> SurfaceFormats;
 		std::vector<VkPresentModeKHR> PresentModes;
 	};
 
 	//顶点数据
-	struct EVertex {
-		glm::vec2 Pos;
+	struct SVertex {
+		glm::vec3 Pos;
 		glm::vec3 Color;
+		glm::vec3 Normal;
 		glm::vec2 TexCoord;
+
+		//材质信息
+		glm::vec3 Ambient;  //环境光
+		glm::vec3 Diffuse;  //漫反射
+		glm::vec3 Specular; //镜面反射
+		float Shininess;
+
 
 		//一旦数据被提交到GPU的显存中，就需要告诉Vulkan传递到顶点着色器中数据的格式。有两个结构体用于描述这部分信息
 		//1.顶点数据绑定:
-		static VkVertexInputBindingDescription getBindingDescription()
+		static std::vector<VkVertexInputBindingDescription> getBindingDescription()
 		{
-			VkVertexInputBindingDescription BindingDescription = {};
-
+			std::vector<VkVertexInputBindingDescription> BindingDescription = {};
+			BindingDescription.resize(1);
 			//定数据条目之间的间隔字节数以及是否每个顶点之后或者每个instance之后移动到下一个条目
-			BindingDescription.binding = 0;
-			BindingDescription.stride = sizeof(EVertex);
-			BindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;  // 移动到每个顶点后的下一个数据条目
+			BindingDescription[0].binding = 0;
+			BindingDescription[0].stride = sizeof(SVertex);
+			BindingDescription[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;  // 移动到每个顶点后的下一个数据条目
 			return BindingDescription;
 		}
 
 		//2.如何处理顶点的输入
-		static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions()
+		static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions()
 		{
-			std::array<VkVertexInputAttributeDescription, 3> AttributeDescriptions = {};
-
+			std::vector<VkVertexInputAttributeDescription> AttributeDescriptions = {};
+			AttributeDescriptions.resize(8);
 			//一个属性描述结构体最终描述了顶点属性如何从对应的绑定描述过的顶点数据来解析数据
 			//|Pos属性
 			AttributeDescriptions[0].binding = 0;
 			AttributeDescriptions[0].location = 0;    //与VertexShader相对应，Pos属性
 			AttributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;  //32bit单精度数据
-			AttributeDescriptions[0].offset = offsetof(EVertex, Pos);
+			AttributeDescriptions[0].offset = offsetof(SVertex, Pos);
 
 			//Color属性
 			AttributeDescriptions[1].binding = 0;
 			AttributeDescriptions[1].location = 1; //Color属性
 			AttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-			AttributeDescriptions[1].offset = offsetof(EVertex, Color);
+			AttributeDescriptions[1].offset = offsetof(SVertex, Color);
 
-			//TexCoord属性
+			//法向量属性
 			AttributeDescriptions[2].binding = 0;
 			AttributeDescriptions[2].location = 2;
-			AttributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-			AttributeDescriptions[2].offset = offsetof(EVertex, TexCoord);
+			AttributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+			AttributeDescriptions[2].offset = offsetof(SVertex, Normal);
+
+			//TexCoord属性
+			AttributeDescriptions[3].binding = 0;
+			AttributeDescriptions[3].location = 3;
+			AttributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
+			AttributeDescriptions[3].offset = offsetof(SVertex, TexCoord);
+
+			//材质属性
+			AttributeDescriptions[4].binding = 0;
+			AttributeDescriptions[4].location = 4;
+			AttributeDescriptions[4].format = VK_FORMAT_R32G32B32_SFLOAT;
+			AttributeDescriptions[4].offset = offsetof(SVertex, Ambient);
+
+			AttributeDescriptions[5].binding = 0;
+			AttributeDescriptions[5].location = 5;
+			AttributeDescriptions[5].format = VK_FORMAT_R32G32B32_SFLOAT;
+			AttributeDescriptions[5].offset = offsetof(SVertex, Diffuse);
+
+			AttributeDescriptions[6].binding = 0;
+			AttributeDescriptions[6].location = 6;
+			AttributeDescriptions[6].format = VK_FORMAT_R32G32B32_SFLOAT;
+			AttributeDescriptions[6].offset = offsetof(SVertex, Specular);
+
+			AttributeDescriptions[7].binding = 0;
+			AttributeDescriptions[7].location = 7;
+			AttributeDescriptions[7].format = VK_FORMAT_R32_SFLOAT;
+			AttributeDescriptions[7].offset = offsetof(SVertex, Shininess);
+
 			return AttributeDescriptions;
+		}
+
+		bool operator==(const SVertex vVertex)
+		{
+			return Pos == vVertex.Pos && Color == vVertex.Color && TexCoord == vVertex.TexCoord;
 		}
 	};
 
 	//用坐标从左上角 0，0 到右下角的 1，1 来映射纹理
-	const std::vector<EVertex> vertices = {
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+	const std::vector<SVertex> vertices = {
+		//positions             colors             normals             texture coords m.ambient            m.diffuse           m.specular        m.shininess
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f, -1.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  0.0f,  1.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{-1.0f, 0.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{1.0f,  0.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f, -1.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{1.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{1.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{0.0f,  1.0f,  0.0f},{0.0f,  1.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+
+		{{ 10.0f, -1.5f,  10.0f}, {1.0f, 0.0f, 0.0f},{ 0.0f, 1.0f, 0.0f},{ 10.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-10.0f, -1.5f,  10.0f}, {1.0f, 0.0f, 0.0f},{ 0.0f, 1.0f, 0.0f},{  0.0f,  0.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{-10.0f, -1.5f, -10.0f}, {1.0f, 0.0f, 0.0f},{ 0.0f, 1.0f, 0.0f},{  0.0f, 10.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f},
+		{{ 10.0f, -1.5f, -10.0f}, {1.0f, 0.0f, 0.0f},{ 0.0f, 1.0f, 0.0f},{ 10.0f, 10.0f},{1.0f, 0.5f, 0.31f}, {1.0f, 0.5f, 0.31f},{0.5f, 0.5f, 0.5f},32.0f}
 	};
 
 	const std::vector<uint16_t> indices = {
-	0, 1, 2, 2, 3, 0
+		   2, 1, 0, 5, 4, 3,
+		   6, 7, 8, 9, 10,11,
+		   12,13,14,15,16,17,
+		   20,19,18,23,22,21,
+		   24,25,26,27,28,29,
+		   32,31,30,35,34,33,
+		   38,37,36,36,39,38,
 	};
 
 	struct UniformBufferObject {
-		alignas(16) glm::mat4 ModelMatrix;
-		alignas(16) glm::mat4 ViewMatrix;
-		alignas(16) glm::mat4 ProjectiveMatrix;
+		glm::mat4 ModelMatrix;
+		glm::mat4 ViewMatrix;
+		glm::mat4 ProjectiveMatrix;
+		glm::mat4 LightSpaceMatrix; //光源转化矩阵， 将世界坐标系转到裁剪坐标系
+
+		glm::vec3 BaseLight;
+		glm::vec3 LightPos;
+		glm::vec3 LightDirection;
+		glm::vec3 ViewPos;
+
+		float AmbientStrenght;
+		float SpecularStrenght;
+
+		glm::vec3 FlashColor;
+		glm::vec3 FlashPos;
+		glm::vec3 FlashDir;
+		float OuterCutOff;
+		float InnerCutOff;
+
+		float foo1 = 0.0f, foo2 = 0.0f, foo3 = 0.0f;
 	};
 
 	class CTest
@@ -169,7 +296,7 @@ namespace test9
 			__cleanUp();
 		}
 	private:
-		GLFWwindow * m_pWindow;
+		GLFWwindow * pWindow;
 		VkInstance m_Instance;
 
 		VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
@@ -201,8 +328,9 @@ namespace test9
 		//指令缓冲对象会在指令池对象被清除时自动被清除，不需要我们自己显式地清除它
 		std::vector<VkCommandBuffer> m_CommandBuffers;
 
-		VkPipelineLayout m_PipelineLayout;
-		VkPipeline m_GraphicsPipeline;
+		//VkPipelineLayout m_PipelineLayout;
+		//VkPipeline m_GraphicsPipeline;
+		VkPipelineCache m_PipelineCache;
 		//所有的描述符绑定都会被组合在一个单独的VkDescriptorSetLayout对象
 		VkDescriptorSetLayout m_DescriptorSetLayout;
 
@@ -233,21 +361,93 @@ namespace test9
 		//Uniform 缓冲区\
 		//在每一帧中我们需要拷贝新的数据到UBO缓冲区，所以存在一个暂存缓冲区是没有意义的。
 		//在这种情况下，它只会增加额外的开销，并且可能降低性能而不是提升性能。因此本次不使用临时缓冲区
-		std::vector<VkBuffer> m_UniformBuffers;
-		std::vector<VkDeviceMemory> m_UniformBuffersMemory;
+		//std::vector<VkBuffer> m_UniformBuffers;
+		//std::vector<VkDeviceMemory> m_UniformBuffersMemory;
 
 		//创建的描述符池对象
 		VkDescriptorPool m_DescriptorPool;
-		std::vector<VkDescriptorSet>  m_DescriptorSets;
+		VkDescriptorSet  m_DescriptorSets;
 
 		//图像中像素被称为纹理元素
 		VkImage m_TextureImage;
 		VkDeviceMemory m_TextureImageMemory;
-
 		//纹理图像
 		VkImageView m_TextureImageView;
 		//采样器对象
 		VkSampler  m_TextureSampler;
+
+		//深度模板测试时
+		VkImage colorImage;
+		VkDeviceMemory colorImageMemory;
+		VkImageView colorImageView;
+
+		VkImage depthImage;
+		VkDeviceMemory depthImageMemory;
+		VkImageView depthImageView;
+		VkFormat depthFormat;
+
+		VkSubmitInfo SubmitInfo;
+		/** @brief Pipeline stages used to wait at for graphics queue submissions */
+		VkPipelineStageFlags submitPipelineStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+		struct {
+			VkBuffer scene;
+			VkBuffer offscreen;
+		} uniformBuffers;
+
+		struct {
+			VkDeviceMemory scene;
+			VkDeviceMemory offscreen;
+		} uniformBufferMemorys;
+
+		//为生成深度贴图准备
+		struct LightSpaceMatrix {
+			glm::mat4 LightSpaceVP; //光源转化矩阵， 将世界坐标系转到裁剪坐标系
+			glm::mat4 ModelMatrix;
+		}LSM;
+
+		//为深度贴图渲染的附件类型
+		struct SFrameBufferAttachment {
+			VkImage image;
+			VkDeviceMemory mem;
+			VkImageView view;
+		};
+		struct {
+			VkPipelineLayout offscreen;
+			VkPipelineLayout m_PipelineLayout;
+		} pipelineLayouts;
+
+		struct {
+			VkDescriptorSet  offscreen;
+			VkDescriptorSet  scene;
+		} descriptorSets;
+
+		//三个pipeline:离屏渲染管线  计算管线 过滤阴影贴图采样（多采样）
+		struct {
+			VkPipeline offscreen;
+			VkPipeline graphicsPipeline;
+			//VkPipeline sceneShadowPCF;
+		} pipelines;
+
+		struct {
+			// Swap chain image presentation
+			VkSemaphore presentComplete;
+			// Command buffer submission and execution
+			VkSemaphore renderComplete;
+		} semaphores;
+		//深度贴图
+		struct SDepthMapPass {
+			int32_t width, height;
+			VkFramebuffer frameBuffer;
+			SFrameBufferAttachment depth;
+			VkRenderPass renderPass;
+			VkSampler depthSampler;
+			VkDescriptorImageInfo descriptor;
+			VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+			VkSemaphore semaphore = VK_NULL_HANDLE;
+		} DepthMapPass;
+
+
 		//创建窗口
 		void __initWindow()
 		{
@@ -255,12 +455,53 @@ namespace test9
 			//由于GLFW库最初是为了OpenGL设计，需要显式设置GLFW阻止它自动创建OpenGL上下文
 			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-			m_pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
+			pWindow = glfwCreateWindow(WIDTH, HEIGHT, "VulKanTest", nullptr, nullptr);
 			//GLFW允许我们使用glfwSetWindowUserPointer将任意指针存储在窗体对象中，
 			//因此可以指定静态类成员调用glfwGetWindowUserPointer返回原始的实例对象
-			glfwSetWindowUserPointer(m_pWindow, this);
+			glfwSetWindowUserPointer(pWindow, this);
 			//会在窗体发生大小变化的时候被事件回调
-			glfwSetFramebufferSizeCallback(m_pWindow, CTest::__framebufferResizeCallback);
+			glfwSetFramebufferSizeCallback(pWindow, CTest::__framebufferResizeCallback);
+
+			glfwSetInputMode(pWindow, GLFW_CURSOR, GLFW_CURSOR_NORMAL); //禁用鼠标悬浮
+			//注册
+			glfwSetCursorPosCallback(pWindow, __mouse_callback);
+			glfwSetCursorPosCallback(pWindow, __scroll_callback);
+		}
+
+		//鼠标回调函数
+		static void __mouse_callback(GLFWwindow* pWindow, double xPos, double yPos)
+		{
+			if (FirstMouse)
+			{
+				LastX = xPos;
+				LastY = yPos;
+				FirstMouse = false;
+			}
+
+			double DeltaX, DeltaY;
+			DeltaX = xPos - LastX;
+			DeltaY = yPos - LastY;
+			LastX = xPos;
+			LastY = yPos;
+
+			Camera.processMouseMovement(DeltaX, DeltaY);
+		}
+
+		//鼠标滚轮缩放
+		static void __scroll_callback(GLFWwindow* pWindow, double xPos, double yPos)
+		{
+			if (Fov >= 1.0f || Fov <= 45.0)
+			{
+				Fov -= yPos;
+			}
+			else if (Fov < 1.0f)
+			{
+				Fov = 1.0f;
+			}
+			else if (Fov > 45.0f)
+			{
+				Fov = 45.0f;
+			}
 		}
 
 		//回调函数,必须为静态函数，才能作为回调函数
@@ -281,15 +522,23 @@ namespace test9
 			//创建实例之后，需要在系统中找到一个支持功能的显卡，查找第一个图像卡作为适合物理设备
 			__pickPhysicalDevice();
 			__createLogicalDevice();
-
+			assert(__getSupportedDepthFormat());
 			__createSwapShain();
 			__createImageViews();
 			__createRenderPass();
 			//要在管线创建时，为着色器提供关于每个描述符绑定的详细信息,考虑到会在管线中使用，因此需要在管线创建之前调用
 			__createDescritorSetLayout();
+			__createPipelineCache();
+			//为深度贴图创建帧缓冲区，保存深度贴图
+			__createDepthMapFrameBuffers();
+
 			__createGraphicsPipelines();
+			__createCommandPool();
+
+			__createColorResources();
+			__createDepthResources();
 			__createFrameBuffers();
-			__createCommandPool(); 
+
 
 			__createTextureImage();
 			//有了纹理，需要纹理视图才能访问纹理
@@ -306,6 +555,7 @@ namespace test9
 			__createDescriptorSet();
 
 			__createCommandBuffers();
+			__createDepthMapCommandBuffers();
 
 			__createSyncObjects(); //创造信号量
 		}
@@ -317,7 +567,7 @@ namespace test9
 			//当窗口最小化时，窗口的帧缓冲实际大小也为0，设置应用程序在窗口最小化后停止渲染，直到窗口重新可见时重建交换链
 			if (Width == 0 || Height == 0)
 			{
-				glfwGetFramebufferSize(m_pWindow, &Width, &Height);
+				glfwGetFramebufferSize(pWindow, &Width, &Height);
 				glfwWaitEvents();
 			}
 			vkDeviceWaitIdle(m_Device);
@@ -333,19 +583,66 @@ namespace test9
 		//循环渲染
 		void __mainLoop()
 		{
-			while (!glfwWindowShouldClose(m_pWindow))
+			while (!glfwWindowShouldClose(pWindow))
 			{
 				glfwPollEvents();
+				__processInput(pWindow);
 				//函数中所有的操作都是异步的。意味着当程序退出mainLoop，
 				//绘制和呈现操作可能仍然在执行。所以清理该部分的资源是不友好的
 				//为了解决这个问题，我们应该在退出mainLoop销毁窗体前等待逻辑设备的操作完成:
 				__drawFrame();   //异步操作
-
+				Camera.updateCameraPos();
 				//更新UniformBuffer
 			}
 			vkDeviceWaitIdle(m_Device);
 		}
 
+		//键盘移动
+		void __processInput(GLFWwindow* pWindow)
+		{
+			if (glfwGetKey(pWindow, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			{
+				glfwSetWindowShouldClose(pWindow, true);
+			}
+
+			if (glfwGetKey(pWindow, GLFW_KEY_W) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedZ(1.0f);
+			}
+			else if (glfwGetKey(pWindow, GLFW_KEY_S) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedZ(-1.0f);
+			}
+			else {
+				Camera.setKeyBoardSpeedZ(0.0f);
+			}
+
+
+			if (glfwGetKey(pWindow, GLFW_KEY_A) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedX(1.0f);
+			}
+			else if (glfwGetKey(pWindow, GLFW_KEY_D) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedX(-1.0f);
+			}
+			else {
+				Camera.setKeyBoardSpeedX(0.0f);
+			}
+
+
+			if (glfwGetKey(pWindow, GLFW_KEY_Q) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedY(1.0f);
+			}
+			else if (glfwGetKey(pWindow, GLFW_KEY_E) == GLFW_PRESS)
+			{
+				Camera.setKeyBoardSpeedY(-1.0f);
+			}
+			else {
+				Camera.setKeyBoardSpeedY(0.0f);
+			}
+		}
 		//为了确保重新创建相关的对象之前，老版本的对象被系统正确回收清理,需要重构Cleanup
 		void __cleanUpSwapChain()
 		{
@@ -358,8 +655,9 @@ namespace test9
 			//选择借助vkFreeCommandBuffers函数清理已经存在的命令缓冲区。这种方式可以重用对象池中已经分配的命令缓冲区。
 			vkFreeCommandBuffers(m_Device, m_CommandPool, static_cast<uint32_t>(m_CommandBuffers.size()), m_CommandBuffers.data());
 
-			vkDestroyPipeline(m_Device, m_GraphicsPipeline, nullptr);
-			vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
+			vkDestroyPipeline(m_Device, pipelines.graphicsPipeline, nullptr);
+			vkDestroyPipeline(m_Device, pipelines.offscreen, nullptr);
+			vkDestroyPipelineLayout(m_Device, pipelineLayouts.m_PipelineLayout, nullptr);
 			vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
 
 			//循环删除视图
@@ -391,21 +689,19 @@ namespace test9
 
 			vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
 			vkFreeMemory(m_Device, m_IndexBufferMemory, nullptr);
-
-			vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
 			vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
 
+
+			vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
 			vkDestroySampler(m_Device, m_TextureSampler, nullptr);
 			vkDestroyImageView(m_Device, m_TextureImageView, nullptr);
 
 			//UBO的数据将被用于所有的绘制使用，所以包含它的缓冲区只能在最后销毁：
-			for (size_t i = 0; i < m_SwapChainImages.size(); i++)
-			{
-				vkDestroyBuffer(m_Device, m_UniformBuffers[i], nullptr);
-				vkFreeMemory(m_Device, m_UniformBuffersMemory[i], nullptr);
+
+				vkDestroyBuffer(m_Device, uniformBuffers.scene, nullptr);
+				vkFreeMemory(m_Device, uniformBufferMemorys.scene, nullptr);
 				//vkDestroyFence(m_Device, m_ImagesInFlight[i], nullptr);
-			}
-		    
+
 			vkDestroyImage(m_Device, m_TextureImage, nullptr);
 			vkFreeMemory(m_Device, m_TextureImageMemory, nullptr);
 
@@ -419,7 +715,7 @@ namespace test9
 			vkDestroySurfaceKHR(m_Instance, m_WindowSurface, nullptr);
 			vkDestroyInstance(m_Instance, nullptr);
 
-			glfwDestroyWindow(m_pWindow);
+			glfwDestroyWindow(pWindow);
 			glfwTerminate();
 		}
 
@@ -510,7 +806,7 @@ namespace test9
 		void __createLogicalDevice()
 		{
 			//创建队列
-			EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+			SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 
 			//描述队列蔟中预定申请的队列个数,创建支持表现和显示功能
 			std::vector<VkDeviceQueueCreateInfo> QueueCreateInfos;
@@ -564,7 +860,7 @@ namespace test9
 		//判断是否支持gPU函数
 		bool __isDeviceSuitable(VkPhysicalDevice vDevice)
 		{
-			EQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
+			SQueueFamilyIndices  Indices = __findQueueFamilies(vDevice);
 
 			//是否支持交换链支持
 			bool DeviceExtensionSupport = __checkDeviceExtensionSupport(vDevice);
@@ -576,7 +872,7 @@ namespace test9
 			bool SwapChainAdequate = false;
 			if (DeviceExtensionSupport)
 			{
-				ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
+				SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(vDevice);
 				//返回真，说明交换链的能力满足需要
 				SwapChainAdequate = !SwapChainSupport.SurfaceFormats.empty() && !SwapChainSupport.PresentModes.empty();
 			}
@@ -584,9 +880,9 @@ namespace test9
 		}
 
 		//检测设备中支持的队列蔟
-		EQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
+		SQueueFamilyIndices __findQueueFamilies(VkPhysicalDevice vDevice)
 		{
-			EQueueFamilyIndices  Indices;
+			SQueueFamilyIndices  Indices;
 
 			//设备队列族的个数
 			uint32_t QueueFamilyCount = 0;
@@ -707,7 +1003,7 @@ namespace test9
 		//Surface
 		void __createSurface()
 		{
-			if (glfwCreateWindowSurface(m_Instance, m_pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
+			if (glfwCreateWindowSurface(m_Instance, pWindow, nullptr, &m_WindowSurface) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create window surface!");
 			}
 		}
@@ -732,9 +1028,9 @@ namespace test9
 		}
 
 		//检查交换链细节
-		ESwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
+		SSwapChainSupportDetails __querySwapChainSupport(VkPhysicalDevice vPhsicalDevice)
 		{
-			ESwapChainSupportDetails Details;
+			SSwapChainSupportDetails Details;
 			//查询基础表面特性
 			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vPhsicalDevice, m_WindowSurface, &Details.Capablities);
 
@@ -781,6 +1077,34 @@ namespace test9
 			return vAvailablFormats[0];
 		}
 
+		// Find a suitable depth format
+		VkBool32 __getSupportedDepthFormat()
+		{
+			VkBool32 validDepthFormat;
+			// Since all depth formats may be optional, we need to find a suitable depth format to use
+			// Start with the highest precision packed format
+			std::vector<VkFormat> depthFormats = {
+				VK_FORMAT_D32_SFLOAT_S8_UINT,
+				VK_FORMAT_D32_SFLOAT,
+				VK_FORMAT_D24_UNORM_S8_UINT,
+				VK_FORMAT_D16_UNORM_S8_UINT,
+				VK_FORMAT_D16_UNORM
+			};
+
+			for (auto& format : depthFormats)
+			{
+				VkFormatProperties formatProps;
+				vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &formatProps);
+				// Format must support depth stencil attachment for optimal tiling
+				if (formatProps.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+				{
+					depthFormat = format;
+					return true;
+				}
+			}
+			return false;
+		}
+
 		//呈现模式，选择最佳模式
 		VkPresentModeKHR __chooseSwapPresentMode(const std::vector<VkPresentModeKHR> vAvailablePresentModes)
 		{
@@ -803,7 +1127,7 @@ namespace test9
 		VkExtent2D __chooseSwapExtent(const VkSurfaceCapabilitiesKHR &vSurfaceCapabilities)
 		{
 			int Width, Height;
-			glfwGetWindowSize(m_pWindow, &Width, &Height);
+			glfwGetWindowSize(pWindow, &Width, &Height);
 
 			if (vSurfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
 			{
@@ -822,7 +1146,7 @@ namespace test9
 		void __createSwapShain()
 		{
 			//查询可以支持交换链的
-			ESwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
+			SSwapChainSupportDetails SwapChainSupport = __querySwapChainSupport(m_PhysicalDevice);
 			VkSurfaceFormatKHR SurfaceFormat = __chooseSwapSurfaceFormat(SwapChainSupport.SurfaceFormats);
 			VkPresentModeKHR   PresentMode = __chooseSwapPresentMode(SwapChainSupport.PresentModes);
 			VkExtent2D         Extent = __chooseSwapExtent(SwapChainSupport.Capablities);
@@ -847,7 +1171,7 @@ namespace test9
 
 			//指定多个队列簇使用交换链图像的方式
 			//这里通过图形队列在交换链图像上进行绘制操作，然后将图像提交给呈现队列进行显示
-			EQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
+			SQueueFamilyIndices Indices = __findQueueFamilies(m_PhysicalDevice);
 			uint32_t QueueFamilyIndices[] = { (uint32_t)Indices.GraphicsFamily, (uint32_t)Indices.PresentFamily };
 
 			//图形和呈现不是同一个队列族，使用协同模式来避免处理图像所有权问题；否则就不能使用
@@ -886,7 +1210,7 @@ namespace test9
 		}
 
 		//将__createImageViews和_createTextureImagView抽象
-		VkImageView __createImageView(VkImage vImage, VkFormat vFormat)
+		VkImageView __createImageView(VkImage vImage, VkFormat vFormat, VkImageAspectFlags vAspectFlags, uint32_t vMipLevels)
 		{
 			VkImageViewCreateInfo ImageViewCreateInfo = {};
 			ImageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -901,9 +1225,9 @@ namespace test9
 			ImageViewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
 			//subresourceRangle字段用于描述图像的使用目标是什么，以及可以被访问的有效区域
-			ImageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			ImageViewCreateInfo.subresourceRange.aspectMask = vAspectFlags;
 			ImageViewCreateInfo.subresourceRange.baseMipLevel = 0;
-			ImageViewCreateInfo.subresourceRange.levelCount = 1;
+			ImageViewCreateInfo.subresourceRange.levelCount = vMipLevels;
 			ImageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
 			ImageViewCreateInfo.subresourceRange.layerCount = 1;
 
@@ -924,7 +1248,7 @@ namespace test9
 			//循环迭代交换链图像
 			for (size_t i = 0; i < m_SwapChainImages.size(); i++)
 			{
-				m_SwapChainImageViews[i] = __createImageView(m_SwapChainImages[i], m_SwapChainImageFormat);
+				m_SwapChainImageViews[i] = __createImageView(m_SwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 			}
 		}
 
@@ -964,7 +1288,8 @@ namespace test9
 		//创建渲染通道
 		void __createRenderPass()
 		{
-			//附件描述
+			//附件描述，有了帧缓冲之后，必要设置渲染的帧缓冲附着
+			//颜色缓冲附着
 			VkAttachmentDescription ColorAttachmentDescription = {}; //这里只用一个颜色缓冲附件
 			ColorAttachmentDescription.format = m_SwapChainImageFormat;  //指定颜色附件格式，这里与交换链中保持一致
 			ColorAttachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;  //这里不做多重采样
@@ -974,26 +1299,57 @@ namespace test9
 			//用于模板数
 			ColorAttachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			ColorAttachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE; //图像在交换链中被呈现
-
 			ColorAttachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			ColorAttachmentDescription.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-			//子通道：一个单独的渲染通道可以由多个子通道组成。子通道是渲染操作的一个序列
 			VkAttachmentReference ColorAttachmentRef = {};
 			ColorAttachmentRef.attachment = 0;  //通过附件描述符集合中的索引来持有,这里只有一个颜色附件
 			ColorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+			// 深度缓冲附着
+			VkAttachmentDescription depthAttachment = {};
+			depthAttachment.format = depthFormat;
+			depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;//多重采样
+			depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			VkAttachmentReference depthAttachmentRef = {};
+			depthAttachmentRef.attachment = 1;
+			depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			//当使用多重采样时，多重采样图像不能直接显示，必须先解析成常规图像，，即解析附件，深度缓冲区不需要，因为不要显示
+			VkAttachmentDescription colorAttachmentResolve = {};
+			colorAttachmentResolve.format = m_SwapChainImageFormat;
+			colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+			colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			VkAttachmentReference colorAttachmentResolveRef = {};
+			colorAttachmentResolveRef.attachment = 2;
+			colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 
 			//子通道
 			VkSubpassDescription SubpassDescription = {};
 			SubpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; //指定graphics subpass图形子通道
 			SubpassDescription.colorAttachmentCount = 1;
 			SubpassDescription.pColorAttachments = &ColorAttachmentRef;  //指定颜色附件引用。附件在数组中的索引直接从片段着色器引用，其layout(location = 0) out vec4 outColor 指令!
+			SubpassDescription.pDepthStencilAttachment = &depthAttachmentRef;
+			//SubpassDescription.pResolveAttachments = &colorAttachmentResolveRef;//让渲染通道定义一个多采样解析操作，让我们渲染图像到屏幕
 
+			std::vector<VkAttachmentDescription> attachments = { ColorAttachmentDescription, depthAttachment,colorAttachmentResolve };
 			//创建渲染管道
 			VkRenderPassCreateInfo RenderPassCreateInfo = {};
 			RenderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-			RenderPassCreateInfo.attachmentCount = 1;
-			RenderPassCreateInfo.pAttachments = &ColorAttachmentDescription;
+			RenderPassCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			RenderPassCreateInfo.pAttachments = attachments.data();
 			RenderPassCreateInfo.subpassCount = 1;
 			RenderPassCreateInfo.pSubpasses = &SubpassDescription;
 
@@ -1016,44 +1372,28 @@ namespace test9
 			}
 		}
 
+		//管线缓存
+		void __createPipelineCache()
+		{
+			VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
+			pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+			if (vkCreatePipelineCache(m_Device, &pipelineCacheCreateInfo, nullptr, &m_PipelineCache)) {
+				throw std::runtime_error("failed to create image!");
+			}
+		}
 		//创建图形管线
 		void __createGraphicsPipelines()
 		{
-			auto VertShaderCode = __readFile("./Shaders/vert.spv");
-			auto FragShaderCode = __readFile("./Shaders/frag.spv");
-
-			VkShaderModule VertShaderModule = __createShaderModule(VertShaderCode);
-			VkShaderModule FragShaderModule = __createShaderModule(FragShaderCode);
-
-			//着色器创建：VkShaderModule对象只是字节码缓冲区的一个包装容器。着色器并没有彼此链接
-			//通过VkPipelineShaderStageCreateInfo结构将着色器模块分配到管线中的顶点或者片段着色器阶段
-
-			//顶点
-			VkPipelineShaderStageCreateInfo VertShaderStageInfo = {};
-			VertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			VertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			VertShaderStageInfo.module = VertShaderModule;
-			VertShaderStageInfo.pName = "main";
-
-			//片段
-			VkPipelineShaderStageCreateInfo FragShaderStageInfo = {};
-			FragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			FragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			FragShaderStageInfo.module = FragShaderModule;
-			FragShaderStageInfo.pName = "main";
-
-			VkPipelineShaderStageCreateInfo ShaderStages[] = { VertShaderStageInfo, FragShaderStageInfo };
-
 			//顶点信息
-			auto BindingDescription = EVertex::getBindingDescription();
-			auto AttributeDescription = EVertex::getAttributeDescriptions();
+			auto BindingDescription = SVertex::getBindingDescription();
+			auto AttributeDescription = SVertex::getAttributeDescriptions();
 
-			VkPipelineVertexInputStateCreateInfo  PipelineVertexInputStateCreateInfo = {};
-			PipelineVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-			PipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
-			PipelineVertexInputStateCreateInfo.pVertexBindingDescriptions = &BindingDescription;
-			PipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t> (AttributeDescription.size());
-			PipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions = AttributeDescription.data();
+			VkPipelineVertexInputStateCreateInfo  PipelinSVertexInputStateCreateInfo = {};
+			PipelinSVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			PipelinSVertexInputStateCreateInfo.vertexBindingDescriptionCount = static_cast<uint32_t> (BindingDescription.size());
+			PipelinSVertexInputStateCreateInfo.pVertexBindingDescriptions = BindingDescription.data();
+			PipelinSVertexInputStateCreateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t> (AttributeDescription.size());
+			PipelinSVertexInputStateCreateInfo.pVertexAttributeDescriptions = AttributeDescription.data();
 
 			//顶点数据的集合图元拓扑结构和是否启用顶点索重新开始图元
 			VkPipelineInputAssemblyStateCreateInfo  PipelineInputAssemblyStateCreateInfo = {};
@@ -1108,7 +1448,20 @@ namespace test9
 			PipelineMultisampleStateCreateInfo.alphaToCoverageEnable = VK_FALSE; // Optional
 			PipelineMultisampleStateCreateInfo.alphaToOneEnable = VK_FALSE; // Optional
 
-			//混色
+			//深度测试
+			VkPipelineDepthStencilStateCreateInfo PipelineDepthStencilStateCreateInfo = {};
+			PipelineDepthStencilStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			PipelineDepthStencilStateCreateInfo.depthTestEnable = VK_TRUE; //启用深度测试
+			PipelineDepthStencilStateCreateInfo.depthWriteEnable = VK_TRUE; //指定通过深度测试的新的片段深度数据可以写入深度缓冲区
+			PipelineDepthStencilStateCreateInfo.depthCompareOp = VK_COMPARE_OP_LESS; //比深度缓冲区中数据小的可以通过测试
+			PipelineDepthStencilStateCreateInfo.depthBoundsTestEnable = VK_FALSE;
+			PipelineDepthStencilStateCreateInfo.minDepthBounds = 0.0f;
+			PipelineDepthStencilStateCreateInfo.maxDepthBounds = 1.0f;
+			PipelineDepthStencilStateCreateInfo.stencilTestEnable = VK_FALSE;
+			PipelineDepthStencilStateCreateInfo.front = {};
+			PipelineDepthStencilStateCreateInfo.back = {};
+
+			//混色：颜色附件的绑定
 			VkPipelineColorBlendAttachmentState PipelineColorBlendAttachmentState = {};
 			PipelineColorBlendAttachmentState.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 			PipelineColorBlendAttachmentState.blendEnable = VK_FALSE;
@@ -1119,7 +1472,7 @@ namespace test9
 			PipelineColorBlendAttachmentState.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
 			PipelineColorBlendAttachmentState.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
-			//所有帧缓冲区的引用
+			//混色
 			VkPipelineColorBlendStateCreateInfo PipelineColorBlendStateCreateInfo = {};
 			PipelineColorBlendStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 			PipelineColorBlendStateCreateInfo.logicOpEnable = VK_FALSE;
@@ -1131,6 +1484,19 @@ namespace test9
 			PipelineColorBlendStateCreateInfo.blendConstants[2] = 0.0f; // Optional
 			PipelineColorBlendStateCreateInfo.blendConstants[3] = 0.0f; // Optional
 
+			//动态状态：视口（VK_DYNAMIC_STATE_VIEWPORT）和裁剪器（VK_DYNAMIC_STATE_SCISSOR）。 此实现指定了视口和裁剪的参数，并且可以在运行时对它们进行更改。
+			std::vector<VkDynamicState> DynamicState = {
+				//视口
+				VK_DYNAMIC_STATE_VIEWPORT,
+				//裁剪器
+				VK_DYNAMIC_STATE_SCISSOR
+			};
+			VkPipelineDynamicStateCreateInfo DynamicStateCreateInfo = {};
+			DynamicStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+			DynamicStateCreateInfo.pDynamicStates = DynamicState.data();
+			DynamicStateCreateInfo.dynamicStateCount = DynamicState.size();
+			DynamicStateCreateInfo.flags = 0;
+
 			//需要在创建管线的时候指定描述符集合的布局，用以告知Vulkan着色器将要使用的描述符。描述符布局在管线布局对象中指定
 			VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo = {};
 			PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1138,39 +1504,108 @@ namespace test9
 			PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout; // Optional
 
 
-			if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
+			if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &pipelineLayouts.m_PipelineLayout) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create pipeline layout!");
 			}
+
+			//着色器创建：VkShaderModule对象只是字节码缓冲区的一个包装容器。着色器并没有彼此链接
+			//通过VkPipelineShaderStageCreateInfo结构将着色器模块分配到管线中的顶点或者片段着色器阶段
+			std::vector<VkPipelineShaderStageCreateInfo> ShaderStages = { };
+			// Scene rendering with shadows applied
+			VkPipelineShaderStageCreateInfo VertStageCreateInfo = __loadShader("./Shaders/ShadowMapVert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			ShaderStages.push_back(VertStageCreateInfo);
+			VkPipelineShaderStageCreateInfo FragStageCreateInfo = __loadShader("./Shaders/ShadowMapFrag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			ShaderStages.push_back(FragStageCreateInfo);
 
 			//创建管线
 			VkGraphicsPipelineCreateInfo GraphicsPipelineCreateInfo = {};
 			GraphicsPipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-			GraphicsPipelineCreateInfo.stageCount = 2;
-			GraphicsPipelineCreateInfo.pStages = ShaderStages;
-			GraphicsPipelineCreateInfo.pVertexInputState = &PipelineVertexInputStateCreateInfo;
-			GraphicsPipelineCreateInfo.pInputAssemblyState = &PipelineInputAssemblyStateCreateInfo;
-			GraphicsPipelineCreateInfo.pViewportState = &PipelineViewportStateCreateInfo;
-			GraphicsPipelineCreateInfo.pRasterizationState = &PipelineRasterizationStateCreateInfo;
-			GraphicsPipelineCreateInfo.pMultisampleState = &PipelineMultisampleStateCreateInfo;
-			GraphicsPipelineCreateInfo.pDepthStencilState = nullptr; // Optional
-			GraphicsPipelineCreateInfo.pColorBlendState = &PipelineColorBlendStateCreateInfo;
-			GraphicsPipelineCreateInfo.pDynamicState = nullptr; // Optional
-			GraphicsPipelineCreateInfo.layout = m_PipelineLayout;   //是句柄不是结构体
+			GraphicsPipelineCreateInfo.layout = pipelineLayouts.m_PipelineLayout;   //是句柄不是结构体
 			GraphicsPipelineCreateInfo.renderPass = m_RenderPass;
 			GraphicsPipelineCreateInfo.subpass = 0;
 			//可以通过已经存在的管线创建新的图形管线（功能相同，节约内存消耗）
 			GraphicsPipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
 			GraphicsPipelineCreateInfo.basePipelineIndex = -1;
+			GraphicsPipelineCreateInfo.pVertexInputState = &PipelinSVertexInputStateCreateInfo;
+			GraphicsPipelineCreateInfo.pInputAssemblyState = &PipelineInputAssemblyStateCreateInfo;
+			GraphicsPipelineCreateInfo.pViewportState = &PipelineViewportStateCreateInfo;
+			GraphicsPipelineCreateInfo.pRasterizationState = &PipelineRasterizationStateCreateInfo;
+			GraphicsPipelineCreateInfo.pMultisampleState = &PipelineMultisampleStateCreateInfo;
+			GraphicsPipelineCreateInfo.pDepthStencilState = &PipelineDepthStencilStateCreateInfo; // Optional
+			GraphicsPipelineCreateInfo.pColorBlendState = &PipelineColorBlendStateCreateInfo;
+			GraphicsPipelineCreateInfo.pDynamicState = nullptr; // Optional
+			GraphicsPipelineCreateInfo.stageCount = ShaderStages.size();
+			GraphicsPipelineCreateInfo.pStages = ShaderStages.data();
+
+			// Use specialization constants to select between horizontal and vertical blur
+			//uint32_t enablePCF = 0;
+			//VkSpecializationMapEntry specializationMapEntry{};
+			//specializationMapEntry.constantID = 0;
+			//specializationMapEntry.offset = 0;
+			//specializationMapEntry.size = sizeof(uint32_t);
+
+			//VkSpecializationInfo specializationInfo{};
+			//specializationInfo.mapEntryCount = 1;
+			//specializationInfo.pMapEntries = &specializationMapEntry;
+			//specializationInfo.dataSize = sizeof(uint32_t);
+			//specializationInfo.pData = &enablePCF;
+			//ShaderStages[1].pSpecializationInfo = &specializationInfo;
 
 			//创建图形管线
-			if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &GraphicsPipelineCreateInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
+			if (vkCreateGraphicsPipelines(m_Device, m_PipelineCache, 1, &GraphicsPipelineCreateInfo, nullptr, &pipelines.graphicsPipeline) != VK_SUCCESS)
+			{
+				throw std::runtime_error("failed to create graphics pipeline!");
+			}
+
+			// PCF filtering
+			//enablePCF = 1;
+			//if (vkCreateGraphicsPipelines(m_Device, m_PipelineCache, 1, &GraphicsPipelineCreateInfo, nullptr, &pipelines.sceneShadowPCF) != VK_SUCCESS) {
+			//	throw std::runtime_error("failed to create graphics pipeline!");
+			//}
+
+
+			//离线渲染管线：深度图着色器管线
+			VkPipelineShaderStageCreateInfo DepthMapVertStageCreateInfo = __loadShader("./Shaders/DepthMapVert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			ShaderStages[0] = DepthMapVertStageCreateInfo;
+			VkPipelineShaderStageCreateInfo DepthMapFragStageCreateInfo = __loadShader("./Shaders/DepthMapFrag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			ShaderStages[1] = DepthMapFragStageCreateInfo;
+
+			PipelineRasterizationStateCreateInfo.cullMode = VK_CULL_MODE_BACK_BIT;    //指定剪裁面的类型方式
+			PipelineRasterizationStateCreateInfo.depthBiasEnable = VK_FALSE;  		// UnEnable depth bias
+			PipelineColorBlendStateCreateInfo.attachmentCount = 0;    // No blend attachment states (no color attachments used)
+
+
+			DynamicState.push_back(VK_DYNAMIC_STATE_DEPTH_BIAS);
+			DynamicStateCreateInfo.pDynamicStates = DynamicState.data();
+			DynamicStateCreateInfo.dynamicStateCount = DynamicState.size();
+			DynamicStateCreateInfo.flags = 0;
+
+			GraphicsPipelineCreateInfo.layout = pipelineLayouts.m_PipelineLayout;   //是句柄不是结构体
+			GraphicsPipelineCreateInfo.renderPass = DepthMapPass.renderPass;
+			if (vkCreateGraphicsPipelines(m_Device, m_PipelineCache, 1, &GraphicsPipelineCreateInfo, nullptr, &pipelines.offscreen) != VK_SUCCESS)
 			{
 				throw std::runtime_error("failed to create graphics pipeline!");
 			}
 
 			//删除
-			vkDestroyShaderModule(m_Device, FragShaderModule, nullptr);
-			vkDestroyShaderModule(m_Device, VertShaderModule, nullptr);
+			//vkDestroyShaderModule(m_Device, FragShaderModule, nullptr);
+			//vkDestroyShaderModule(m_Device, VertShaderModule, nullptr);
+		}
+
+		//加载着色器
+		VkPipelineShaderStageCreateInfo __loadShader(const std::string& vShaderName, VkShaderStageFlagBits vShaderStageFlagBits)
+		{
+			VkPipelineShaderStageCreateInfo ShaderStageInfo = {};
+			ShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			ShaderStageInfo.stage = vShaderStageFlagBits;
+			ShaderStageInfo.module = __loadShader(vShaderName);
+			ShaderStageInfo.pName = "main";
+			return ShaderStageInfo;
+		}
+		VkShaderModule __loadShader(const std::string& vShaderName)
+		{
+			auto ShaderCode = __readFile(vShaderName);
+			return __createShaderModule(ShaderCode);
 		}
 
 		//创建帧缓冲
@@ -1181,14 +1616,18 @@ namespace test9
 
 			//迭代图像视图并通过他们建立对应FrameBuffer
 			for (size_t i = 0; i < m_SwapChainImageViews.size(); i++)
-			{
-				VkImageView Attachments[] = { m_SwapChainImageViews[i] };
+			{		//渲染通道就绪后，修改createframebuffer并将新的图像视图添加到列表中:
+				std::array<VkImageView, 3> attachments = {
+						colorImageView,
+						depthImageView,
+						m_SwapChainImageViews[i]
+				};
 
 				VkFramebufferCreateInfo FrameBufferCreateInfo = {};
 				FrameBufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 				FrameBufferCreateInfo.renderPass = m_RenderPass;
-				FrameBufferCreateInfo.attachmentCount = 1;
-				FrameBufferCreateInfo.pAttachments = Attachments;
+				FrameBufferCreateInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+				FrameBufferCreateInfo.pAttachments = attachments.data();
 				FrameBufferCreateInfo.width = m_SwapChainExtent.width;
 				FrameBufferCreateInfo.height = m_SwapChainExtent.height;
 				FrameBufferCreateInfo.layers = 1;
@@ -1200,11 +1639,161 @@ namespace test9
 			}
 		}
 
+		// Setup the offscreen framebuffer for rendering the scene from light's point-of-view to
+		// The depth attachment of this framebuffer will then be used to sample from in the fragment shader of the shadowing pass
+		//创建深度贴图帧缓冲对象，由于深度贴图中只需要深度数据，不需要颜色附件，只要深度附件
+		void __createDepthMapFrameBuffers()
+		{
+			DepthMapPass.width = SHADOWMAP_SIZE;
+			DepthMapPass.height = SHADOWMAP_SIZE;
+
+			//对于深度贴图，只需要深度附件
+			VkImageCreateInfo image{};
+			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			image.imageType = VK_IMAGE_TYPE_2D;
+			image.extent.width = DepthMapPass.width;
+			image.extent.height = DepthMapPass.height;
+			image.extent.depth = 1;
+			image.mipLevels = 1;
+			image.arrayLayers = 1;
+			image.samples = VK_SAMPLE_COUNT_1_BIT;
+			image.tiling = VK_IMAGE_TILING_OPTIMAL;
+			image.format = VK_FORMAT_D16_UNORM;
+			// Depth stencil attachment
+			image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;		// We will sample directly from the depth attachment for the shadow mapping
+
+			if (vkCreateImage(m_Device, &image, nullptr, &DepthMapPass.depth.image)) {
+				throw std::runtime_error("failed to create depthmap image!");
+			}
+
+			//申请并分配内存
+			VkMemoryAllocateInfo memAlloc{};
+			memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			VkMemoryRequirements memReqs;
+			vkGetImageMemoryRequirements(m_Device, DepthMapPass.depth.image, &memReqs);
+			memAlloc.allocationSize = memReqs.size;
+			memAlloc.memoryTypeIndex = __findMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			if (vkAllocateMemory(m_Device, &memAlloc, nullptr, &DepthMapPass.depth.mem)) {
+				throw std::runtime_error("failed to create image!");
+			}
+			if (vkBindImageMemory(m_Device, DepthMapPass.depth.image, DepthMapPass.depth.mem, 0)) {
+				throw std::runtime_error("failed to create image!");
+			}
+
+			//创建深度模板视图
+			VkImageViewCreateInfo depthStencilView{};
+			depthStencilView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			depthStencilView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			depthStencilView.format = VK_FORMAT_D16_UNORM;
+			depthStencilView.subresourceRange = {};
+			depthStencilView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			depthStencilView.subresourceRange.baseMipLevel = 0;
+			depthStencilView.subresourceRange.levelCount = 1;
+			depthStencilView.subresourceRange.baseArrayLayer = 0;
+			depthStencilView.subresourceRange.layerCount = 1;
+			depthStencilView.image = DepthMapPass.depth.image;
+			if (vkCreateImageView(m_Device, &depthStencilView, nullptr, &DepthMapPass.depth.view)) {
+				throw std::runtime_error("failed to create image!");
+			}
+
+			// 对于深度缓冲区创建采样器，直接读取深度数据 
+			// Used to sample in the fragment shader for shadowed rendering
+			VkSamplerCreateInfo sampler{};
+			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.magFilter = VK_FILTER_LINEAR;
+			sampler.minFilter = VK_FILTER_LINEAR;
+			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			sampler.addressModeV = sampler.addressModeU;
+			sampler.addressModeW = sampler.addressModeU;
+			sampler.mipLodBias = 0.0f;
+			sampler.maxAnisotropy = 1.0f;
+			sampler.minLod = 0.0f;
+			sampler.maxLod = 1.0f;
+			sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+			if (vkCreateSampler(m_Device, &sampler, nullptr, &DepthMapPass.depthSampler)) {
+				throw std::runtime_error("failed to create image!");
+			}
+
+			// 为屏幕外渲染创建一个单独的渲染通道，因为它可能不同于用于场景渲染的通道
+			__createDepthMapRenderpass();
+
+			// Create frame buffer
+			VkFramebufferCreateInfo framebufferCreateInfo{};
+			framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferCreateInfo.renderPass = DepthMapPass.renderPass;
+			framebufferCreateInfo.attachmentCount = 1;  //这里只有一个深度模板缓冲
+			framebufferCreateInfo.pAttachments = &DepthMapPass.depth.view;
+			framebufferCreateInfo.width = DepthMapPass.width;
+			framebufferCreateInfo.height = DepthMapPass.height;
+			framebufferCreateInfo.layers = 1;
+
+			if (vkCreateFramebuffer(m_Device, &framebufferCreateInfo, nullptr, &DepthMapPass.frameBuffer)) {
+				throw std::runtime_error("failed to create image!");
+			}
+		}
+
+		// Set up a separate render pass for the offscreen frame buffer
+		// This is necessary as the offscreen frame buffer attachments use formats different to those from the example render pass
+		void __createDepthMapRenderpass()
+		{
+			VkAttachmentDescription attachmentDescription{};
+			attachmentDescription.format = VK_FORMAT_D16_UNORM;
+			attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+			attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;							// Clear depth at beginning of the render pass
+			attachmentDescription.storeOp = VK_ATTACHMENT_STORE_OP_STORE;						// We will read from depth, so it's important to store the depth attachment results
+			attachmentDescription.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			attachmentDescription.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			attachmentDescription.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;					// We don't care about initial layout of the attachment
+			attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;// Attachment will be transitioned to shader read at render pass end
+
+			VkAttachmentReference depthReference = {};
+			depthReference.attachment = 0;
+			depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;			// Attachment will be used as depth/stencil during render pass
+
+			VkSubpassDescription subpass = {};
+			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+			subpass.colorAttachmentCount = 0;													// No color attachments
+			subpass.pDepthStencilAttachment = &depthReference;									// Reference to our depth attachment
+
+			// 指定了当命令缓冲区执行结束向哪些信号量发出信号，指定了当命令缓冲区执行结束向哪些信号量发出信号se subpass dependencies for layout transitions
+			std::array<VkSubpassDependency, 2> dependencies;
+			dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[0].dstSubpass = 0;
+			dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			dependencies[1].srcSubpass = 0;
+			dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+			dependencies[1].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+			VkRenderPassCreateInfo renderPassCreateInfo{};
+			renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			renderPassCreateInfo.attachmentCount = 1;
+			renderPassCreateInfo.pAttachments = &attachmentDescription;
+			renderPassCreateInfo.subpassCount = 1;
+			renderPassCreateInfo.pSubpasses = &subpass;
+			renderPassCreateInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+			renderPassCreateInfo.pDependencies = dependencies.data();
+
+			if (vkCreateRenderPass(m_Device, &renderPassCreateInfo, nullptr, &DepthMapPass.renderPass)) {
+				throw std::runtime_error("failed to create image!");
+			}
+		}
+
 		//创建指令池
 		void __createCommandPool()
 		{
 			//每个指令池对象分配的指令缓冲对象只能提交给一个特定类型的队列，这里使用绘制指令
-			EQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
+			SQueueFamilyIndices QueueFamilyIndices = __findQueueFamilies(m_PhysicalDevice);
 
 			VkCommandPoolCreateInfo CommandPoolCreateInfo = {};
 			CommandPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -1217,7 +1806,7 @@ namespace test9
 			}
 		}
 
-		//创建指令缓冲对象
+		//创建指令缓冲对象:期间配置好口尺寸、Pipeline、DescriptorSets、VertexBuffer、IndexBuffer即可
 		void __createCommandBuffers()
 		{
 			m_CommandBuffers.resize(m_SwapChainFrameBuffers.size());
@@ -1232,17 +1821,63 @@ namespace test9
 				throw std::runtime_error("failed to allocate command buffers!");
 			}
 
+			VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
+			CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  //在指令缓冲等待执行时，仍然可以提交这一指令缓冲
+			CommandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+
+			//因为我们现在有多个带 VK_ATTACHMENT_LOAD_OP_CLEAR 的附件，我们还需要指定多个清除值
+			VkClearValue clearValues[2];
+			VkViewport viewport{};
+			VkRect2D scissor{};
+
 			//记录指令到指令缓冲
 			for (size_t i = 0; i < m_CommandBuffers.size(); i++)
 			{
-				VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
-				CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-				CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  //在指令缓冲等待执行时，仍然可以提交这一指令缓冲
-				CommandBufferBeginInfo.pInheritanceInfo = nullptr;
-
 				if (vkBeginCommandBuffer(m_CommandBuffers[i], &CommandBufferBeginInfo) != VK_SUCCESS) {
 					throw std::runtime_error("failed to begin recording command buffer!");
 				}
+
+				//First render pass: Generate shadow map by rendering the scene from light's POV
+				//{
+				//	clearValues[0].depthStencil = { 1.0f, 0 };
+				//	//开始渲染流程
+				//	VkRenderPassBeginInfo RenderPassBeginInfo = {};
+				//	RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+				//	RenderPassBeginInfo.renderPass = DepthMapPass.renderPass;   //指定渲染流程对象
+				//	RenderPassBeginInfo.framebuffer = DepthMapPass.frameBuffer; //指定帧缓冲对象
+				//	//渲染区域，这里与附着保持一致
+				//	RenderPassBeginInfo.renderArea.offset = { 0,0 };
+				//	RenderPassBeginInfo.renderArea.extent.width = DepthMapPass.width;
+				//	RenderPassBeginInfo.renderArea.extent.height = DepthMapPass.height;
+				//	RenderPassBeginInfo.clearValueCount = 1;
+				//	RenderPassBeginInfo.pClearValues = clearValues;
+
+				//	vkCmdBeginRenderPass(DepthMapPass.commandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				//	//pDynamicState
+				//	viewport.width = m_SwapChainExtent.width;
+				//	viewport.height = m_SwapChainExtent.height;
+				//	viewport.minDepth = 0.0f;
+				//	viewport.maxDepth = 1.0f;
+				//	vkCmdSetViewport(m_CommandBuffers[i], 0, 1, &viewport);
+
+				//	scissor.extent.width = m_SwapChainExtent.width;;
+				//	scissor.extent.height = m_SwapChainExtent.height;
+				//	scissor.offset = { 0,0 };
+				//	vkCmdSetScissor(m_CommandBuffers[i], 0, 1, &scissor);
+
+				//	//TODO
+				//	vkCmdBindPipeline(DepthMapPass.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.offscreen);
+				//	vkCmdBindDescriptorSets(DepthMapPass.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.offscreen, 0, 1, &descriptorSets.offscreen[i], 0, NULL);
+				//	vkCmdEndRenderPass(drawCmdBuffers[i]);
+				//}
+
+				//Second pass: Scene rendering with applied shadow map
+
+				clearValues[0].color = { 0.1f, 0.1f, 0.3f, 0.5f };;
+				clearValues[1].depthStencil = { 1.0f, 0 };
 
 				//开始渲染流程
 				VkRenderPassBeginInfo RenderPassBeginInfo = {};
@@ -1251,44 +1886,156 @@ namespace test9
 				RenderPassBeginInfo.framebuffer = m_SwapChainFrameBuffers[i]; //指定帧缓冲对象
 				//渲染区域，这里与附着保持一致
 				RenderPassBeginInfo.renderArea.offset = { 0,0 };
-				RenderPassBeginInfo.renderArea.extent = m_SwapChainExtent;
-				//清除值
-				VkClearValue ClearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
-				RenderPassBeginInfo.clearValueCount = 1;
-				RenderPassBeginInfo.pClearValues = &ClearColor;
+				RenderPassBeginInfo.renderArea.extent.width = WIDTH;
+				RenderPassBeginInfo.renderArea.extent.height = HEIGHT;
+				RenderPassBeginInfo.clearValueCount = 2;
+				RenderPassBeginInfo.pClearValues = clearValues;
+				//pDynamicState
+				viewport.width = WIDTH;
+				viewport.height = HEIGHT;
+				viewport.minDepth = 0.0f;
+				viewport.maxDepth = 1.0f;
+
+				scissor.extent.width = WIDTH;
+				scissor.extent.height = HEIGHT;
+				scissor.offset = { 0,0 };
 
 				//参数：1.指令缓冲对象  2.渲染流程信息  3.所有要执行的指令都在主要指令缓冲中，没有辅助指令缓冲需要执行
 				vkCmdBeginRenderPass(m_CommandBuffers[i], &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-				//绑定顶点缓冲区
+				//vkCmdSetViewport(m_CommandBuffers[i], 0, 1, &viewport);
+				//vkCmdSetScissor(m_CommandBuffers[i], 0, 1, &scissor);
+				//将描述符集合绑定到实际的着色器的描述符中
+				vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.m_PipelineLayout, 0, 1, &m_DescriptorSets, 0, nullptr);
+				//绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
+				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.graphicsPipeline);
+				////绑定顶点缓冲区
 				VkBuffer VertexBuffers[] = { m_VertexBuffer };
 				VkDeviceSize  OffSets[] = { 0 };
 				vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, VertexBuffers, OffSets);
-
-				//索引缓冲区
+				////索引缓冲区
 				vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
-
-				//绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
-				vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-
-				//将描述符集合绑定到实际的着色器的描述符中
-				vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1, &m_DescriptorSets[i], 0, nullptr);
-
-				//提交绘制操作到指令缓冲，
-				//参数：1.指定索引的数量 2.几何instanceing数量. 3：没有使用instancing，所以指定1。索引数表示被传递到顶点缓冲区中的顶点数量
-				//4：指定索引缓冲区的偏移量，使用1将会导致图形卡在第二个索引处开始读取  5.定索引缓冲区中添加的索引的偏移。 6.指定instancing偏移量，我们没有使用该特性
+				////提交绘制操作到指令缓冲，
+				////参数：1.指定索引的数量 2.几何instanceing数量. 3：没有使用instancing，所以指定1。索引数表示被传递到顶点缓冲区中的顶点数量
+				////4：指定索引缓冲区的偏移量，使用1将会导致图形卡在第二个索引处开始读取  5.定索引缓冲区中添加的索引的偏移。 6.指定instancing偏移量，我们没有使用该特性
 				vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-				
 				//结束渲染流程
 				vkCmdEndRenderPass(m_CommandBuffers[i]);
-
 				//结束记录指令到指令缓冲
 				if (vkEndCommandBuffer(m_CommandBuffers[i]) != VK_SUCCESS) {
 					throw std::runtime_error("failed to record command buffer!");
 				}
 			}
+
+			////参数：1.指令缓冲对象  2.渲染流程信息  3.所有要执行的指令都在主要指令缓冲中，没有辅助指令缓冲需要执行
+			//vkCmdBeginRenderPass(m_CommandBuffers[i], &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			////绑定顶点缓冲区
+			//VkBuffer VertexBuffers[] = { m_VertexBuffer };
+			//VkDeviceSize  OffSets[] = { 0 };
+			//vkCmdBindVertexBuffers(m_CommandBuffers[i], 0, 1, VertexBuffers, OffSets);
+
+			////索引缓冲区
+			//vkCmdBindIndexBuffer(m_CommandBuffers[i], m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+			////绑定图形管线:第二个参数用于指定管线对象是图形管线还是计算管线
+			//vkCmdBindPipeline(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.graphicsPipeline);
+
+			////将描述符集合绑定到实际的着色器的描述符中
+			//vkCmdBindDescriptorSets(m_CommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.m_PipelineLayout, 0, 1, &descriptorSets.scene[i], 0, nullptr);
+
+			////提交绘制操作到指令缓冲，
+			////参数：1.指定索引的数量 2.几何instanceing数量. 3：没有使用instancing，所以指定1。索引数表示被传递到顶点缓冲区中的顶点数量
+			////4：指定索引缓冲区的偏移量，使用1将会导致图形卡在第二个索引处开始读取  5.定索引缓冲区中添加的索引的偏移。 6.指定instancing偏移量，我们没有使用该特性
+			//vkCmdDrawIndexed(m_CommandBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 		}
 
+		void __createDepthMapCommandBuffers()
+		{
+			if (DepthMapPass.commandBuffer == VK_NULL_HANDLE)
+			{
+				DepthMapPass.commandBuffer = __createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1, false);
+			}
+			if (DepthMapPass.semaphore == VK_NULL_HANDLE)
+			{
+				// Create a semaphore used to synchronize offscreen rendering and usage
+				VkSemaphoreCreateInfo semaphoreCreateInfo{};
+				semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+				if (vkCreateSemaphore(m_Device, &semaphoreCreateInfo, nullptr, &DepthMapPass.semaphore) != VK_SUCCESS) {
+					throw std::runtime_error("failed to record command buffer!");
+				}
+			}
+
+			VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
+			CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  //在指令缓冲等待执行时，仍然可以提交这一指令缓冲
+			CommandBufferBeginInfo.pInheritanceInfo = nullptr;
+			VkClearValue clearValues[1];
+			clearValues[0].depthStencil = { 1.0f, 0 };
+
+			//开始渲染流程
+			VkRenderPassBeginInfo RenderPassBeginInfo = {};
+			RenderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			RenderPassBeginInfo.renderPass = DepthMapPass.renderPass;   //指定渲染流程对象
+			RenderPassBeginInfo.framebuffer = DepthMapPass.frameBuffer; //指定帧缓冲对象
+			//渲染区域，这里与附着保持一致
+			RenderPassBeginInfo.renderArea.offset = { 0,0 };
+			RenderPassBeginInfo.renderArea.extent.width = DepthMapPass.width;
+			RenderPassBeginInfo.renderArea.extent.height = DepthMapPass.height;
+			RenderPassBeginInfo.clearValueCount = 2;
+			RenderPassBeginInfo.pClearValues = clearValues;
+
+			if (vkBeginCommandBuffer(DepthMapPass.commandBuffer, &CommandBufferBeginInfo) != VK_SUCCESS) {
+				throw std::runtime_error("failed to begin recording command buffer!");
+			}
+
+
+			vkCmdBeginRenderPass(DepthMapPass.commandBuffer, &RenderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			vkCmdBindPipeline(DepthMapPass.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.offscreen);
+			vkCmdBindDescriptorSets(DepthMapPass.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayouts.offscreen, 0, 1, &descriptorSets.offscreen, 0, NULL);
+
+			//绑定顶点缓冲区
+			VkBuffer vertexBuffers[] = { m_VertexBuffer };
+			VkDeviceSize offsets[1] = { 0 };
+			vkCmdBindVertexBuffers(DepthMapPass.commandBuffer, 0, 1, vertexBuffers, offsets);
+			vkCmdBindIndexBuffer(DepthMapPass.commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdDrawIndexed(DepthMapPass.commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+
+			vkCmdEndRenderPass(DepthMapPass.commandBuffer);
+
+			if (vkEndCommandBuffer(DepthMapPass.commandBuffer) != VK_SUCCESS) {
+				throw std::runtime_error("failed to record command buffer!");
+			}
+		}
+
+		VkCommandBuffer __createCommandBuffer(VkCommandBufferLevel vLevel, uint32_t vCommandBufferCount, bool begin = false)
+		{
+			VkCommandBufferAllocateInfo CommandBufferAllocateInfo = {};
+			CommandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+			CommandBufferAllocateInfo.commandPool = m_CommandPool;
+			CommandBufferAllocateInfo.level = vLevel;   //可以被提交到队列进行执行，但不能被其它指令缓冲对象调用。
+			CommandBufferAllocateInfo.commandBufferCount = vCommandBufferCount;
+
+			VkCommandBuffer cmdBuffer;
+			if (vkAllocateCommandBuffers(m_Device, &CommandBufferAllocateInfo, &cmdBuffer) != VK_SUCCESS) {
+				throw std::runtime_error("failed to allocate command buffers!");
+			}
+
+			// If requested, also start recording for the new command buffer
+			if (begin)
+			{
+				VkCommandBufferBeginInfo CommandBufferBeginInfo = {};
+				CommandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+				CommandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;  //在指令缓冲等待执行时，仍然可以提交这一指令缓冲
+				CommandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+				if (vkBeginCommandBuffer(cmdBuffer, &CommandBufferBeginInfo) != VK_SUCCESS) {
+					throw std::runtime_error("failed to begin recording command buffer!");
+				}
+			}
+			return cmdBuffer;
+		}
 		//绘制步骤：需要同步操作，栅栏（用于应用程序与渲染操作进行同步）或者信号量（用于在命令队列内或者跨命令队列同步操作）实现同步
 		//1.首先，从交换链中获取一图像
 		//2.从帧缓冲中使用作为附件的图像执行命令缓冲区中的命令NDLE,
@@ -1297,11 +2044,12 @@ namespace test9
 		void __drawFrame()
 		{
 			//等前一帧完成
-			vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+			//vkWaitForFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
 
 			uint32_t ImageIndex;
-			//1.首先，从交换链中获取一图像
-			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
+			//1.首先，从交换链中获取一图像,
+			//第四个参数：当presentation引擎完成了图像的呈现后会使用该对象发起信号。这就是开始绘制的时间点。
+			VkResult Result = vkAcquireNextImageKHR(m_Device, m_SwapChain, UINT64_MAX, semaphores.presentComplete, VK_NULL_HANDLE, &ImageIndex);
 			if (Result == VK_ERROR_OUT_OF_DATE_KHR)  //VK_ERROR_OUT_OF_DATE_KHR：交换链不能继续使用。通常发生在窗口大小改变后
 			{
 				__recreateSwapChain();
@@ -1316,47 +2064,84 @@ namespace test9
 
 			//让CPU在当前位置被阻塞掉，然后一直等待到它接受的Fence变为signaled的状态
 			//核验当前帧是否使用了这个图像
-			if (m_ImagesInFlight[ImageIndex] != VK_NULL_HANDLE) {
-				vkWaitForFences(m_Device, 1, &m_ImagesInFlight[ImageIndex], VK_TRUE, UINT64_MAX);
-			}
+			//if (m_ImagesInFlight[ImageIndex] != VK_NULL_HANDLE) {
+			//	vkWaitForFences(m_Device, 1, &m_ImagesInFlight[ImageIndex], VK_TRUE, UINT64_MAX);
+			//}
 			//标价当前帧正在使用这个图像
-			m_ImagesInFlight[ImageIndex] = m_InFlightFences[m_CurrentFrame];
+			//m_ImagesInFlight[ImageIndex] = m_InFlightFences[m_CurrentFrame];
+
 
 			//2.提交命令缓冲到图形队列
-			VkSubmitInfo SubmitInfo = {};
+			//VkSubmitInfo SubmitInfo = {};
 			SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
+			//在使用阴影贴图之前，场景渲染命令缓冲区必须等待屏幕外的渲染(和传输)完成
+			// Offscreen rendering
 			//该信号量标记一个图像已经获取到且准备渲染就绪，WaitStages表示管线在那个阶段等待
-			VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
-			VkPipelineStageFlags WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-			SubmitInfo.waitSemaphoreCount = 1;
-			//执行开始之前要等待的哪个信号量及要等待的通道的哪个阶段
-			SubmitInfo.pWaitSemaphores = WaitSemaphores;
-			SubmitInfo.pWaitDstStageMask = WaitStages;
-			//指定哪个命令缓冲区被实际提交执行，这里为提交命令缓冲区，它将我们刚获取的交换链图像做为颜色附件进行绑定。
+			//VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
+			VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+			SubmitInfo.pWaitDstStageMask = waitStages;
+			// Wait for swap chain presentation to finish
+			SubmitInfo.pWaitSemaphores = &semaphores.presentComplete;
+			// Signal ready with offscreen semaphore
+			//指定了当命令缓冲区执行结束向哪些信号量发出信号
+			SubmitInfo.pSignalSemaphores = &DepthMapPass.semaphore;//signalSemaphoreCount和pSignalSemaphores参数指定了当命令缓冲区执行结束向哪些信号量发出信号
+
+			// Submit work
 			SubmitInfo.commandBufferCount = 1;
-			SubmitInfo.pCommandBuffers = &m_CommandBuffers[ImageIndex];
-
-			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore：渲染已经完成可以呈现了
-			VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
-			SubmitInfo.signalSemaphoreCount = 1;
-			SubmitInfo.pSignalSemaphores = SignalSemaphores;
-
-			//重置来解除标记
-			vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
-
-			//将命令缓冲区提交到图形队列
-			//当命令缓冲完成执行的时候应该标记的栅栏。我们可以用这个来标记一个帧已经完成了
-			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS) {
+			SubmitInfo.pCommandBuffers = &DepthMapPass.commandBuffer;
+			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
 				throw std::runtime_error("failed to submit draw command buffer!");
 			}
+
+			// Scene rendering
+			//指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore：渲染已经完成可以呈现了
+			//VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+			// Wait for offscreen semaphore
+			SubmitInfo.pWaitSemaphores = &DepthMapPass.semaphore;;
+			// Signal ready with render complete semaphpre
+			SubmitInfo.pSignalSemaphores = &semaphores.renderComplete;
+
+			// Submit work
+			SubmitInfo.pCommandBuffers = &m_CommandBuffers[ImageIndex];
+			if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+				throw std::runtime_error("failed to submit draw command buffer!");
+			}
+
+
+			////该信号量标记一个图像已经获取到且准备渲染就绪，WaitStages表示管线在那个阶段等待
+			//VkSemaphore WaitSemaphores[] = { m_ImageAvailableSemaphores[m_CurrentFrame] };
+			//VkPipelineStageFlags WaitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+			//SubmitInfo.waitSemaphoreCount = 1;
+			////执行开始之前要等待的哪个信号量及要等待的通道的哪个阶段
+			//SubmitInfo.pWaitSemaphores = WaitSemaphores;
+			//SubmitInfo.pWaitDstStageMask = WaitStages;
+			////指定哪个命令缓冲区被实际提交执行，这里为提交命令缓冲区，它将我们刚获取的交换链图像做为颜色附件进行绑定。
+			//SubmitInfo.commandBufferCount = 1;
+			//SubmitInfo.pCommandBuffers = &m_CommandBuffers[ImageIndex];
+
+			////指定了当命令缓冲区执行结束向哪些信号量发出信号。根据需要使用renderFinishedSemaphore：渲染已经完成可以呈现了
+			//VkSemaphore SignalSemaphores[] = { m_RenderFinishedSemaphores[m_CurrentFrame] };
+			//SubmitInfo.signalSemaphoreCount = 1;
+			////SubmitInfo.pSignalSemaphores = SignalSemaphores;
+
+			////重置来解除标记
+			//vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
+
+			////将命令缓冲区提交到图形队列
+			////当命令缓冲完成执行的时候应该标记的栅栏。我们可以用这个来标记一个帧已经完成了
+			//if (vkQueueSubmit(m_GraphicsQueue, 1, &SubmitInfo, m_InFlightFences[m_CurrentFrame]) != VK_SUCCESS) {
+			//	throw std::runtime_error("failed to submit draw command buffer!");
+			//}
+
+			//重置来解除标记
+			//vkResetFences(m_Device, 1, &m_InFlightFences[m_CurrentFrame]);
 
 			//3.将结果提交到交换链，使其最终显示在屏幕上
 			VkPresentInfoKHR PresentInfo = {};
 			PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 			PresentInfo.waitSemaphoreCount = 1;
 			//指定在进行presentation之前要等待的信号量
-			PresentInfo.pWaitSemaphores = SignalSemaphores;
+			PresentInfo.pWaitSemaphores = &semaphores.renderComplete;
 
 			//指定用于提交图像的交换链和每个交换链图像索引。大多数情况下仅一个
 			VkSwapchainKHR SwapChains[] = { m_SwapChain };
@@ -1391,33 +2176,51 @@ namespace test9
 		//同步原语：1.创建信号量，创建信号量集合，为多个并行帧  2.Fence
 		void __createSyncObjects()
 		{
-			m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-			m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-			m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-			m_ImagesInFlight.resize(m_SwapChainImages.size(), VK_NULL_HANDLE);
+			//m_ImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+			//m_RenderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+			//m_InFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+			//m_ImagesInFlight.resize(m_SwapChainImages.size(), VK_NULL_HANDLE);
 
 			VkSemaphoreCreateInfo semaphoreInfo = {};
 			semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-			VkFenceCreateInfo fenceInfo = {};
-			fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-			fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+			//VkFenceCreateInfo fenceInfo = {};
+			//fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+			//fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-				if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
-					vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
-					vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
-					throw std::runtime_error("failed to create synchronization objects for a frame!");
-				}
+			// Create a semaphore used to synchronize image presentation
+            // Ensures that the image is displayed before we start submitting new commands to the queu
+			if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &semaphores.presentComplete)) {
+				throw std::runtime_error("failed to create synchronization objects for a frame!");
 			}
+			// Create a semaphore used to synchronize command submission
+			// Ensures that the image is not presented until all commands have been sumbitted and executed
+			if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &semaphores.renderComplete)) {
+				throw std::runtime_error("failed to create synchronization objects for a frame!");
+			}
+			//for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			//	if (vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS ||
+			//		vkCreateSemaphore(m_Device, &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS ||
+			//		vkCreateFence(m_Device, &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
+			//		throw std::runtime_error("failed to create synchronization objects for a frame!");
+			//	}
+			//}
+			SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+			SubmitInfo.pWaitDstStageMask = &submitPipelineStages;
+			SubmitInfo.waitSemaphoreCount = 1;
+			SubmitInfo.pWaitSemaphores = &semaphores.presentComplete;
+			SubmitInfo.signalSemaphoreCount = 1;
+			SubmitInfo.pSignalSemaphores = &semaphores.renderComplete;
+
 		}
 
 		//创建顶点缓冲,顶点着色器创建之后，使用CPU可见的缓冲作为临时缓冲，使用显卡读取较快的缓冲作为真正的顶点缓冲
-		//新的关联stagingBufferMemory作为内存的stagingBuffer缓冲对象来存放CPU加载的顶点数据。
+		//过程：对于顶点缓冲/索引缓冲，需要先在对主机（CPU)可见的共享内存上分配临时内存stagingBuffer，将数据copy到该内存，然后在GPU上分配独立的内存，通过Transfer Command将数据从共享内存或者高速缓存拷贝至GPU内存。
 		void __createVertexBuffer()
 		{
 			VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
+			//暂存缓冲区
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
 			__createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1557,7 +2360,7 @@ namespace test9
 		}
 
 		//使用缓冲区读取图像，则命令要求图像在正确的布局中
-		void __transitionImageLayout(VkImage vImage, VkFormat vFormat, VkImageLayout vOldLayout, VkImageLayout VNewLayout)
+		void __transitionImageLayout(VkImage vImage, VkFormat vFormat, VkImageLayout vOldLayout, VkImageLayout VNewLayout, uint32_t vMipLevels)
 		{
 			VkCommandBuffer CommandBuffer = __beginSingleTimeCommands();
 
@@ -1575,7 +2378,7 @@ namespace test9
 			ImageMemoryBarrier.image = vImage;
 			ImageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			ImageMemoryBarrier.subresourceRange.baseMipLevel = 0;
-			ImageMemoryBarrier.subresourceRange.levelCount = 1;
+			ImageMemoryBarrier.subresourceRange.levelCount = vMipLevels;
 			ImageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
 			ImageMemoryBarrier.subresourceRange.layerCount = 1;
 
@@ -1585,6 +2388,7 @@ namespace test9
 			//预屏障:色器读取操作应该等待传输写入，特别是 fragment shader进行读取，因为这是要使用纹理的地方
 			VkPipelineStageFlags SourceStage;
 			VkPipelineStageFlags DestinationStage;
+
 
 			if (vOldLayout == VK_IMAGE_LAYOUT_UNDEFINED && VNewLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
 				ImageMemoryBarrier.srcAccessMask = 0;
@@ -1600,9 +2404,23 @@ namespace test9
 				SourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 				DestinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			}
+			else if (vOldLayout == VK_IMAGE_LAYOUT_UNDEFINED && VNewLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+				ImageMemoryBarrier.srcAccessMask = 0;
+				ImageMemoryBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				SourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+				DestinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+			}
+			else if (vOldLayout == VK_IMAGE_LAYOUT_UNDEFINED && VNewLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+				ImageMemoryBarrier.srcAccessMask = 0;
+				ImageMemoryBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				SourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+				DestinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			}
 			else {
 				throw std::invalid_argument("unsupported layout transition!");
 			}
+
 			//屏障主要用于同步目的，所以必须在应用屏障前指定哪一种操作类型及涉及到的资源，同时要指定哪一种操作及资源必须等待屏障。
 			vkCmdPipelineBarrier(
 				CommandBuffer,
@@ -1615,12 +2433,12 @@ namespace test9
 
 			__endSingleTimeCommands(CommandBuffer);
 		}
-		
+
 		//缓冲区拷贝到图像
 		void __copyBufferToImage(VkBuffer vBuffer, VkImage vImage, uint32_t vWidth, uint32_t vHeight)
 		{
 			VkCommandBuffer CommandBuffer = __beginSingleTimeCommands();
-			
+
 			//指定拷贝具体哪一部分到图像的区域
 			VkBufferImageCopy Region = {};
 			Region.bufferOffset = 0;       //指定缓冲区中byte偏移量
@@ -1652,7 +2470,7 @@ namespace test9
 
 			__endSingleTimeCommands(CommandBuffer);
 		}
-		
+
 		//索引缓冲
 		void __createIndexBuffer()
 		{
@@ -1684,10 +2502,104 @@ namespace test9
 			//绑定顶点缓冲区，在__createCommandBuffer函数定义
 		}
 
+		
+
+		//uniform缓冲区
+		//在每一帧中我们需要拷贝新的数据到UBO缓冲区，所以存在一个暂存缓冲区是没有意义的。在这种情况下，它只会增加额外的开销，并且可能降低性能而不是提升性能。
+		void __createUniformBuffer()
+		{
+
+			for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
+				__createBuffer(sizeof(UniformBufferObject), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers.scene, uniformBufferMemorys.scene);
+				// Offscreen vertex shader uniform buffer block
+				__createBuffer(sizeof(LSM), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers.offscreen, uniformBufferMemorys.offscreen);
+				__updateUniformBuffer(i);
+			}
+		}
+
+		//更新uniform数据
+		//该函数会在每一帧中创建新的变换矩阵以确保几何图形旋转。我们需要引入新的头文件使用该功能：
+		void __updateUniformBuffer(uint32_t vCurrentImage)
+		{
+			//将物体转化到光源坐标系中
+			//正交投影
+			glm::mat4 DepthProjectionMatrix = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 10.0f, 10.0f);
+			glm::mat4 DepthViewMatrix = glm::lookAt(LightPos, glm::vec3(0.0f), glm::vec3(0, 1, 0));
+			glm::mat4 DepthModelMatrix = glm::mat4(1.0f);
+			//将每个世界空间坐标变换到光源处所见到的那个空间(裁剪空间）
+			LSM.LightSpaceVP = DepthProjectionMatrix * DepthViewMatrix;
+			LSM.ModelMatrix = DepthModelMatrix;
+
+			void* OffscreenData;
+			//映射设备内存
+			vkMapMemory(m_Device, uniformBufferMemorys.offscreen, 0, sizeof(LSM), 0, &OffscreenData);
+			memcpy(OffscreenData, &LSM, sizeof(LSM));
+			vkUnmapMemory(m_Device, uniformBufferMemorys.offscreen);
+
+			static auto StartTime = std::chrono::high_resolution_clock::now();
+
+			auto CurrentTime = std::chrono::high_resolution_clock::now();
+			float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count();
+
+			UniformBufferObject UBO = {};
+			UBO.AmbientStrenght = AmbientStrenght;
+			UBO.SpecularStrenght = SpecularStrenght;
+			UBO.BaseLight = BaseLight;
+			UBO.LightPos = LightPos;
+			UBO.LightDirection = LightDirection;
+			UBO.ViewPos = Camera.getCameraPos();
+			//聚光灯
+			UBO.FlashPos = Camera.getCameraPos();
+			UBO.FlashDir = Camera.getCameraDir();
+			UBO.FlashPos = FlashColor;
+			UBO.OuterCutOff = glm::cos(glm::radians(10.5f));
+			UBO.InnerCutOff = glm::cos(glm::radians(8.5f));
+
+			UBO.ModelMatrix = glm::mat4(1.0f);
+			//glm::lookAt 函数以眼睛位置，中心位置和上方向为参数。
+			UBO.ViewMatrix = Camera.getViewMatrix();
+			//选择使用FOV为45度的透视投影。其他参数是宽高比，近裁剪面和远裁剪面。重要的是使用当前的交换链扩展来计算宽高比，以便在窗体调整大小后参考最新的窗体宽度和高度。
+			UBO.ProjectiveMatrix = glm::perspective(glm::radians(Fov), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, ZNear, ZFar);
+			//GLM最初是为OpenGL设计的，它的裁剪坐标的Y是反转的。修正该问题的最简单的方法是在投影矩阵中Y轴的缩放因子反转
+			UBO.ProjectiveMatrix[1][1] *= -1;
+			UBO.LightSpaceMatrix = LSM.LightSpaceVP;
+
+			//以将UBO中的数据复制到uniform缓冲区
+			void* Data;
+			//映射设备内存
+			vkMapMemory(m_Device, uniformBufferMemorys.scene, 0, sizeof(UBO), 0, &Data);
+			memcpy(Data, &UBO, sizeof(UBO));
+			vkUnmapMemory(m_Device, uniformBufferMemorys.scene);
+		}
+
+		//创建描述符池
+		void __createDescritorPool()
+		{
+			//组合图像采样器描述符
+			std::array<VkDescriptorPoolSize, 3> poolSizes = {};
+			poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			poolSizes[0].descriptorCount = 6;
+			poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			poolSizes[1].descriptorCount = 4;
+			poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			poolSizes[2].descriptorCount = 4;
+
+			//定义描述符池的大小
+			VkDescriptorPoolCreateInfo DescriptorPoolCreateInfo = {};
+			DescriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			DescriptorPoolCreateInfo.pPoolSizes = poolSizes.data();
+			DescriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+			DescriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(m_SwapChainImages.size());  //指定可以分配的最大描述符集个数：
+
+			if (vkCreateDescriptorPool(m_Device, &DescriptorPoolCreateInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+			{
+				throw std::runtime_error("failed to create descriptor pool!");
+			}
+		}
 		//每个绑定都会通过VkDescriptorSetLayoutBinding结构体描述
 		void __createDescritorSetLayout()
 		{
-			//UBO描述符
+			//顶点着色器binding 0：UBO描述符
 			VkDescriptorSetLayoutBinding  UBOLayoutBinding = {};
 			UBOLayoutBinding.binding = 0;                                         //着色器中使用的binding
 			UBOLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;  //指定着色器中描述符类型
@@ -1695,16 +2607,25 @@ namespace test9
 			UBOLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;             //指定描述符在着色器哪个阶段杯引用，这里仅在顶点着色器中使用描述符
 			UBOLayoutBinding.pImmutableSamplers = nullptr;                        //与图像采样的描述符有关
 
-			//另一个描述符：组合图像取样器(combined image sampler)
-			VkDescriptorSetLayoutBinding SamplerLayoutBinding{};
-			SamplerLayoutBinding.binding = 1;
-			SamplerLayoutBinding.descriptorCount = 1;
-			SamplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			SamplerLayoutBinding.pImmutableSamplers = nullptr;
+			//片段着色器binding 1：另一个描述符：组合图像取样器(combined image sampler)
+			VkDescriptorSetLayoutBinding SamplerLayoutBinding1{};
+			SamplerLayoutBinding1.binding = 1;
+			SamplerLayoutBinding1.descriptorCount = 1;
+			SamplerLayoutBinding1.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			SamplerLayoutBinding1.pImmutableSamplers = nullptr;
 			//指定在片段着色器中使用组合图像采样器描述符
-			SamplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+			SamplerLayoutBinding1.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-			std::array<VkDescriptorSetLayoutBinding, 2> bindings = { UBOLayoutBinding, SamplerLayoutBinding };
+			//片段着色器binding 2:深度贴图采样器
+			VkDescriptorSetLayoutBinding SamplerLayoutBinding2{};
+			SamplerLayoutBinding2.binding = 2;
+			SamplerLayoutBinding2.descriptorCount = 1;
+			SamplerLayoutBinding2.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			SamplerLayoutBinding2.pImmutableSamplers = nullptr;
+			//指定在片段着色器中使用组合图像采样器描述符
+			SamplerLayoutBinding2.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+			std::vector<VkDescriptorSetLayoutBinding> bindings = { UBOLayoutBinding, SamplerLayoutBinding1, SamplerLayoutBinding2 };
 			VkDescriptorSetLayoutCreateInfo layoutInfo{};
 			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -1713,70 +2634,15 @@ namespace test9
 			if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor set layout!");
 			}
-		}
 
-		//uniform缓冲区
-		//在每一帧中我们需要拷贝新的数据到UBO缓冲区，所以存在一个暂存缓冲区是没有意义的。在这种情况下，它只会增加额外的开销，并且可能降低性能而不是提升性能。
-		void __createUniformBuffer()
-		{
-			VkDeviceSize BufferSize = sizeof(UniformBufferObject);
-			m_UniformBuffers.resize(m_SwapChainImages.size());
-			m_UniformBuffersMemory.resize(m_SwapChainImages.size());
+			VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+			pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			pipelineLayoutCreateInfo.setLayoutCount = 1;
+			pipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout;
 
-			for (size_t i = 0; i < m_SwapChainImages.size(); i++) {
-				__createBuffer(BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-					VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-					m_UniformBuffers[i], m_UniformBuffersMemory[i]);
-			}
-		}
-
-		//更新uniform数据
-		//该函数会在每一帧中创建新的变换矩阵以确保几何图形旋转。我们需要引入新的头文件使用该功能：
-		void __updateUniformBuffer(uint32_t vCurrentImage)
-		{
-			static auto StartTime = std::chrono::high_resolution_clock::now();
-
-			auto CurrentTime = std::chrono::high_resolution_clock::now();
-			float Time = std::chrono::duration<float, std::chrono::seconds::period>(CurrentTime - StartTime).count();
-
-			UniformBufferObject UBO = {};
-			UBO.ModelMatrix = glm::rotate(glm::mat4(1.0f), Time * glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-			//glm::lookAt 函数以眼睛位置，中心位置和上方向为参数。
-			UBO.ViewMatrix = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-			//选择使用FOV为45度的透视投影。其他参数是宽高比，近裁剪面和远裁剪面。重要的是使用当前的交换链扩展来计算宽高比，以便在窗体调整大小后参考最新的窗体宽度和高度。
-			UBO.ProjectiveMatrix = glm::perspective(glm::radians(45.0f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height, 0.1f, 10.0f);
-			//GLM最初是为OpenGL设计的，它的裁剪坐标的Y是反转的。修正该问题的最简单的方法是在投影矩阵中Y轴的缩放因子反转
-			UBO.ProjectiveMatrix[1][1] *= -1;
-
-			//以将UBO中的数据复制到uniform缓冲区
-			void* Data;
-			//映射设备内存
-			vkMapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage], 0, sizeof(UBO), 0, &Data);
-			memcpy(Data, &UBO, sizeof(UBO));
-			vkUnmapMemory(m_Device, m_UniformBuffersMemory[vCurrentImage]);
-		}
-
-		//创建描述符池
-		void __createDescritorPool()
-		{
-			std::array<VkDescriptorPoolSize, 2> PoolSizes = {};
-			PoolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			PoolSizes[0].descriptorCount = static_cast<uint32_t>(m_SwapChainImages.size());
-
-			PoolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			PoolSizes[1].descriptorCount = static_cast<uint32_t>(m_SwapChainImages.size());
-
-			//定义描述符池的大小
-			VkDescriptorPoolCreateInfo DescriptorPoolCreateInfo = {};
-			DescriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			DescriptorPoolCreateInfo.pPoolSizes = PoolSizes.data();
-			DescriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(PoolSizes.size());
-			DescriptorPoolCreateInfo.maxSets = static_cast<uint32_t>(m_SwapChainImages.size());  //指定可以分配的最大描述符集个数：
-
-			if (vkCreateDescriptorPool(m_Device, &DescriptorPoolCreateInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
-			{
-				throw std::runtime_error("failed to create descriptor pool!");
+			// screen pipeline layout
+			if (vkCreatePipelineLayout(m_Device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayouts.offscreen)) {
+				throw std::runtime_error("failed to create!");
 			}
 		}
 
@@ -1785,56 +2651,146 @@ namespace test9
 		void __createDescriptorSet()
 		{
 
-			std::vector<VkDescriptorSetLayout> DescriptorSetLayouts(m_SwapChainImages.size(), m_DescriptorSetLayout);
-			
+			VkDescriptorSetLayout DescriptorSetLayouts = {m_DescriptorSetLayout };
+
 			VkDescriptorSetAllocateInfo AllocateInfo = {};
 			AllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			AllocateInfo.descriptorPool = m_DescriptorPool;
-			AllocateInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapChainImages.size());
-			AllocateInfo.pSetLayouts = DescriptorSetLayouts.data();
+			AllocateInfo.descriptorSetCount = 1;
+			AllocateInfo.pSetLayouts = &DescriptorSetLayouts;
 
-			m_DescriptorSets.resize(m_SwapChainImages.size());
 			//不需要明确清理描述符集合，因为它们会在描述符对象池销毁的时候自动清
 			//从描述符池分配描述符集对象
-			if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, m_DescriptorSets.data()) != VK_SUCCESS)
+			if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, &m_DescriptorSets) != VK_SUCCESS)
 			{
 				throw std::runtime_error("failed to allocate descriptor set!");
 			}
 
-			for (size_t i = 0; i < m_SwapChainImages.size(); i++)
-			{
-				//描述符集合分配好之后，配置描述符
-				VkDescriptorBufferInfo BufferInfo{};
-				BufferInfo.buffer = m_UniformBuffers[i];
-				BufferInfo.offset = 0;
-				BufferInfo.range = sizeof(UniformBufferObject);
+			// Image descriptor for the shadow map attachment
+            //描述符集合分配好之后，需要对描述符配置，指定引用缓冲区
+			VkDescriptorImageInfo descriptorImageInfo = {};
+			descriptorImageInfo.sampler = DepthMapPass.depthSampler;
+			descriptorImageInfo.imageView = DepthMapPass.depth.view;
+			descriptorImageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+
+	 		//描述符集对象创建后，还需要进行一定地配置。使用循环来遍历描述符集对象，对它进行配置：
+	        //off_screen离屏渲染
+			VkDescriptorBufferInfo DescriptorBufferInfo = {};
+			DescriptorBufferInfo.buffer = uniformBuffers.offscreen;
+			DescriptorBufferInfo.offset = 0;
+			DescriptorBufferInfo.range = sizeof(LSM);
+
+
+			//描述符的配置更新使用vkUpdateDescriptorSets函数，它需要VkWriteDescriptorSet结构体的数组作为参数。
+			std::vector<VkWriteDescriptorSet>	writeDescriptorSets = {};
+			writeDescriptorSets.resize(2);
+			// Binding 0 : Vertex shader uniform buffer
+			writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeDescriptorSets[0].dstSet = m_DescriptorSets;
+			writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writeDescriptorSets[0].dstBinding = 0;
+			writeDescriptorSets[0].pBufferInfo = &DescriptorBufferInfo;
+			writeDescriptorSets[0].descriptorCount = 1;
+
+			// Binding 1 : Fragment shader texture sampler
+			writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeDescriptorSets[1].dstSet = m_DescriptorSets;
+			writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			writeDescriptorSets[1].dstBinding = 1;
+			writeDescriptorSets[1].pImageInfo = &descriptorImageInfo;
+			writeDescriptorSets[1].descriptorCount = 1;
+			vkUpdateDescriptorSets(m_Device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, NULL);
+
+
+			//
+			if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, &descriptorSets.offscreen) != VK_SUCCESS) {
+				throw std::runtime_error("failed to allocate descriptor set!");
+			}
+			// Offscreen shadow map generation生成阴影贴图
+            // Binding 0 : Vertex shader uniform buffer
+			writeDescriptorSets.resize(1);
+			writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			writeDescriptorSets[0].dstSet = descriptorSets.offscreen;
+			writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			writeDescriptorSets[0].dstBinding = 0;
+			writeDescriptorSets[0].pBufferInfo = &DescriptorBufferInfo;
+			writeDescriptorSets[0].descriptorCount = 1;
+			vkUpdateDescriptorSets(m_Device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, NULL);
+
+
+
+			if (vkAllocateDescriptorSets(m_Device, &AllocateInfo, &descriptorSets.scene) != VK_SUCCESS) {
+				throw std::runtime_error("failed to allocate descriptor set!");
+			}
+				//3D scene ：场景
+			   // Image descriptor for the shadow map attachment
+				descriptorImageInfo.sampler = DepthMapPass.depthSampler;
+				descriptorImageInfo.imageView = DepthMapPass.depth.view;
+
+				writeDescriptorSets.resize(2);
+				// Binding 0 : Vertex shader uniform buffer
+				writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				writeDescriptorSets[0].dstSet = descriptorSets.scene;
+				writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				writeDescriptorSets[0].dstBinding = 0;
+				writeDescriptorSets[0].pBufferInfo = &DescriptorBufferInfo;
+				writeDescriptorSets[0].descriptorCount = 1;
+
+				// Binding 1 : Fragment shader texture sampler
+				writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				writeDescriptorSets[1].dstSet = descriptorSets.scene;
+				writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				writeDescriptorSets[1].dstBinding = 1;
+				writeDescriptorSets[1].pImageInfo = &descriptorImageInfo;
+				writeDescriptorSets[1].descriptorCount = 1;
+				vkUpdateDescriptorSets(m_Device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, NULL);
+
+
+
+				//3D 场景
+				VkDescriptorBufferInfo DescriptorBuffer{};
+				DescriptorBuffer.buffer = uniformBuffers.scene;
+				DescriptorBuffer.offset = 0;
+				DescriptorBuffer.range = sizeof(UniformBufferObject);
 
 				VkDescriptorImageInfo imageInfo{};
 				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				imageInfo.imageView = m_TextureImageView;
 				imageInfo.sampler = m_TextureSampler;
 
-				std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+				writeDescriptorSets.resize(3);
+				// Binding 0 : Vertex shader uniform buffer
+				writeDescriptorSets[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				writeDescriptorSets[0].dstSet = m_DescriptorSets ;
+				writeDescriptorSets[0].dstBinding = 0;                  //为 uniform buffer 绑定的索引设定为0
+				writeDescriptorSets[0].dstArrayElement = 0;             //描述符可以是数组，所以需要指定要更新的数组索引。在这里没有使用数组，所以简单的设置为0
+				writeDescriptorSets[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //指定描述符类型
+				writeDescriptorSets[0].descriptorCount = 1;             //指定描述多少描述符需要被更新
+				writeDescriptorSets[0].pBufferInfo = &DescriptorBuffer;      //指定描述符引用的缓冲区数据 
 
-				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[0].dstSet = m_DescriptorSets[i];
-				descriptorWrites[0].dstBinding = 0;                  //为 uniform buffer 绑定的索引设定为0
-				descriptorWrites[0].dstArrayElement = 0;             //描述符可以是数组，所以需要指定要更新的数组索引。在这里没有使用数组，所以简单的设置为0
-				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; //指定描述符类型
-				descriptorWrites[0].descriptorCount = 1;             //指定描述多少描述符需要被更新
-				descriptorWrites[0].pBufferInfo = &BufferInfo;      //指定描述符引用的缓冲区数据 
+				// Binding 1 : Fragment shader shadow sampler
+				writeDescriptorSets[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				writeDescriptorSets[1].dstSet = m_DescriptorSets;
+				writeDescriptorSets[1].dstBinding = 1;
+				writeDescriptorSets[1].dstArrayElement = 0;
+				writeDescriptorSets[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				writeDescriptorSets[1].descriptorCount = 1;
+				writeDescriptorSets[1].pImageInfo = &imageInfo;   ////指定描述符引用的图像数据
 
-				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-				descriptorWrites[1].dstSet = m_DescriptorSets[i];
-				descriptorWrites[1].dstBinding = 1;
-				descriptorWrites[1].dstArrayElement = 0;
-				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-				descriptorWrites[1].descriptorCount = 1;
-				descriptorWrites[1].pImageInfo = &imageInfo;   ////指定描述符引用的图像数据
+				// Binding 2 : Fragment shader DepthMap sampler
+				writeDescriptorSets[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				writeDescriptorSets[2].dstSet = m_DescriptorSets;
+				writeDescriptorSets[2].dstBinding = 2;
+				writeDescriptorSets[2].dstArrayElement = 0;
+				writeDescriptorSets[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				writeDescriptorSets[2].descriptorCount = 1;
+				writeDescriptorSets[2].pImageInfo = &descriptorImageInfo;   ////指定描述符引用的图像数据
+
 				//更新描述符的配置
-				vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+				vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 				//现在需要更新__createCommandBuffers函数，使用cmdBindDescriptorSets将描述符集合绑定到实际的着色器的描述符中：
-			}
+			
 		}
 
 		//加载图片和提交到VulKan图像对象中，途中会用到命令缓冲区，因此在__createCommandPool函数之后
@@ -1843,7 +2799,7 @@ namespace test9
 			int TexWidth, TexHeight, TexChannels;
 
 			//STBI_rgb_alpha值强制加载图片的alpha通道，即使没有改通道值，像素逐行排列，每个像素有四个字节
-			stbi_uc* Pixels = stbi_load("./Images/boy.jpg", &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
+			stbi_uc* Pixels = stbi_load("./Images/viking_room.png", &TexWidth, &TexHeight, &TexChannels, STBI_rgb_alpha);
 			VkDeviceSize ImageSize = TexWidth * TexHeight * 4;
 
 			if (!Pixels) {
@@ -1854,9 +2810,9 @@ namespace test9
 			VkDeviceMemory StagingBufferMemory;
 
 			//创建临时缓冲区
-			__createBuffer(ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-				           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				           StagingBuffer, StagingBufferMemory);
+			__createBuffer(ImageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				StagingBuffer, StagingBufferMemory);
 
 			//使用映射（vkMapMemory）和解映射（vkUnmapMemory）函数将图像数据 push 到 GPU 上。
 			void* data;
@@ -1869,24 +2825,24 @@ namespace test9
 			//不要忘记清理原图像的像素数据
 			stbi_image_free(Pixels);
 			__createImage(TexWidth, TexHeight, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-				          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				          m_TextureImage, m_TextureImageMemory);
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				m_TextureImage, m_TextureImageMemory);
 
 			//创建贴图图像，下一步copy暂存缓冲区到贴图图像
 			//1.变换贴图图像到 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-			__transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			__transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
 			//2.执行缓冲区到图像的拷贝操作
 			__copyBufferToImage(StagingBuffer, m_TextureImage, static_cast<uint32_t>(TexWidth), static_cast<uint32_t>(TexHeight));
 			//在shader着色器中开始从贴图图像的采样，我们需要最后一个变换来准备着色器访问
-			__transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			__transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1);
 
 			vkDestroyBuffer(m_Device, StagingBuffer, nullptr);
 			vkFreeMemory(m_Device, StagingBufferMemory, nullptr);
 		}
 
 		//创建图像对象和内存分配
-		void __createImage(uint32_t vWidth, uint32_t vHeight, VkFormat vFormat, VkImageTiling vTiling, VkImageUsageFlags vUsage, 
-						   VkMemoryPropertyFlags vProperties, VkImage& vImage, VkDeviceMemory& vImageMemory)
+		void __createImage(uint32_t vWidth, uint32_t vHeight, VkFormat vFormat, VkImageTiling vTiling, VkImageUsageFlags vUsage,
+			VkMemoryPropertyFlags vProperties, VkImage& vImage, VkDeviceMemory& vImageMemory)
 		{
 			//本可以通过着色器访问缓冲区中像素值，但在VuklKam中最好使用image对象访问缓冲区，可以快速检索颜色
 			VkImageCreateInfo ImageCreateInfo = {};
@@ -1928,7 +2884,7 @@ namespace test9
 		//创建纹理视图
 		void __createTextureImageView()
 		{
-			m_TextureImageView = __createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM);
+			m_TextureImageView = __createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 		}
 
 		//着色器直接从图像中读取纹素是可以的，但是当它们作为纹理图像的时候并不常见。纹理图像通常使用采样器访问
@@ -1948,7 +2904,7 @@ namespace test9
 
 			SamplerInfo.anisotropyEnable = VK_TRUE; // 指定是否使用各向异性过滤器。没有理由不使用该特性，除非性能是一个问题
 			SamplerInfo.maxAnisotropy = 16;         //限制可用于计算最终颜色的纹素采样的数量。低的数值会得到比较好的性能，但是会得到较差的质量
-			
+
 			//定采样范围超过图像时候返回的颜色，与之对应的是边缘寻址模式。可以以float或者int格式返回黑色，白色或者透明度。但是不能指定任意颜色
 			SamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 
@@ -1970,5 +2926,20 @@ namespace test9
 				throw std::runtime_error("failed to create texture sampler!");
 			}
 		}
+
+		void __createColorResources() {
+			VkFormat colorFormat = m_SwapChainImageFormat;
+
+			__createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage, colorImageMemory);
+			colorImageView = __createImageView(colorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+
+			__transitionImageLayout(colorImage, colorFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+		}
+
+		void __createDepthResources() {
+			__createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+			depthImageView = __createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+		}
+		
 	};
 }
