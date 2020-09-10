@@ -81,6 +81,6 @@ namespace vk_Demo
 	}
 	void CVertexBuffer::bind(VkCommandBuffer cmdBuffer)
 	{
-		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &(m_VertexBuffer->getBuffer()), &m_Offset);
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &(m_VertexBuffer->getHandle()), &m_Offset);
 	}
 }

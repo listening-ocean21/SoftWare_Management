@@ -1,6 +1,3 @@
-#include<vulkan\vulkan.h>
-#include<vector>
-
 #include "../../Head/1_Device/CLogicalDevice.h"
 #include "../../Head/2_Buffer/CBuffer.h"
 #include "../../Head/3_CommandBuffer/CCommandBuffer.h"

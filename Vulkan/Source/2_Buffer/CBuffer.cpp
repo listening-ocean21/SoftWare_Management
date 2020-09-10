@@ -51,12 +51,12 @@ namespace vk_Demo
 	}
 
 	//创建Buffer对象
-	CBuffer* CBuffer::createBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vMemoryPropertyFlags, VkDeviceSize vSize, void* vData)
+	 CBuffer* CBuffer::createBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vMemoryPropertyFlags, VkDeviceSize vSize, void* vData)
 	{
 		CBuffer* pBuffer = new CBuffer();
 
-		pBuffer->m_Device = vDevice->getInstanceHandle();
 		VkDevice vkDevice = vDevice->getInstanceHandle();
+		pBuffer->m_Device = vkDevice;
 
 		//创建缓冲区
 		VkBufferCreateInfo BufferInfo = {};
@@ -104,7 +104,7 @@ namespace vk_Demo
 		if (vData != nullptr)
 		{
 			pBuffer->map();
-			copyToBuffer(vData, vSize);
+			memcpy(pBuffer->m_pMapped,vData, vSize);
 			//由于现在处理器存在缓存，不会立即处理数据，需要通知驱动程序，使用内存一致性通知
 			if ((vMemoryPropertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0)
 			{

@@ -1,6 +1,3 @@
-#include <vulkan\vulkan.h>
-#include<vector>
-
 #include "../../Head/2_Buffer/CBuffer.h"
 #include "../../Head/1_Device/CLogicalDevice.h"
 #include "../../Head/3_CommandBuffer/CCommandBuffer.h"
@@ -12,10 +9,10 @@ namespace vk_Demo
 		CIndexBuffer() {};
 		~CIndexBuffer();
 
+		void bindDraw(VkCommandBuffer cmdBuffer);
 
-		void bind(VkCommandBuffer cmdBuffer);
-
-		static CIndexBuffer* createindexBuffer(std::shared_ptr<CLogicalDevice> vulkanDevice, CCommandBuffer* cmdBuffer, std::vector<uint16_t> indices);
+		CIndexBuffer* createIndexBuffer(std::shared_ptr<CLogicalDevice> vDevice, CCommandBuffer* cmdBuffer, std::vector<uint16_t> indices);
+		CIndexBuffer* createIndexBuffer(std::shared_ptr<CLogicalDevice> vDevice, CCommandBuffer* cmdBuffer, std::vector<uint32_t> indices);
 	private:
 		VkDevice		m_Device = VK_NULL_HANDLE;
 	    CBuffer*		m_IndexBuffer = nullptr;

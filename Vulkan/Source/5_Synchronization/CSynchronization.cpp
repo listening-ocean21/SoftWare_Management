@@ -3,7 +3,7 @@
 namespace vk_Demo
 {
 	//Fence
-	CFence::CFence(CLogicalDevice* vDevcie, bool vSignaled):m_Fence(VK_NULL_HANDLE), m_State(CRnce::State::UNSIGNALED)
+	CFence::CFence(CLogicalDevice* vDevcie, bool vSignaled):m_Fence(VK_NULL_HANDLE), m_State(State::UNSIGNALED)
 	{
 		VkFenceCreateInfo CreateInfo;
 		CreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -37,7 +37,7 @@ namespace vk_Demo
 			return Fence;
 		}
 
-		CFence* NewFence = new CFence(m_Device, this, vSignaled);
+		CFence* NewFence = new CFence(m_Device,vSignaled);
 		m_UsedFences.push_back(NewFence);
 		return NewFence;
 

@@ -1090,7 +1090,7 @@ private:
 		auto BindingDescription = SVertex::getBindingDescription();
 		auto AttributeDescription = SVertex::getAttributeDescriptions();
 
-		VkPipelinSVertexInputStateCreateInfo  PipelinSVertexInputStateCreateInfo = {};
+		VkPipelineVertexInputStateCreateInfo  PipelinSVertexInputStateCreateInfo = {};
 		PipelinSVertexInputStateCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 		PipelinSVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
 		PipelinSVertexInputStateCreateInfo.pVertexBindingDescriptions = &BindingDescription;

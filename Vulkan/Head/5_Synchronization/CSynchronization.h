@@ -1,4 +1,3 @@
-#include <vulkan\vulkan.h>
 #include "../../Head/1_Device/CLogicalDevice.h"
 
 class CLogicalDevice;

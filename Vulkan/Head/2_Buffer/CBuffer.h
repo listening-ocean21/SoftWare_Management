@@ -1,4 +1,3 @@
-#include <vulkan\vulkan.h>
 #include <memory>
 
 #include "../../Head/1_Device/CLogicalDevice.h"
@@ -9,16 +8,19 @@ namespace vk_Demo
 	{
 	public:
 		virtual ~CBuffer();
-		CBuffer* createBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vMemoryPropertyFlags, VkDeviceSize vSize, void* vData);
+		static CBuffer* createBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkBufferUsageFlags vUsageFlags, VkMemoryPropertyFlags vMemoryPropertyFlags, VkDeviceSize vSize, void* vData = nullptr);
 
-		VkResult map(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);  //填充整个缓冲区
 		void unMap();
-		VkResult bind(VkDeviceSize vOffset = 0);
 		void copyToBuffer(void* vData, VkDeviceSize vSize);
+		void setupDescriptore(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);
+
+		VkResult bind(VkDeviceSize vOffset = 0);
+		VkBuffer getHandle()  const { return m_Buffer; }
+		VkDescriptorBufferInfo getDescriptorBufferInfo() const { return m_BufferDescriptor;}
+		VkResult map(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);  //填充整个缓冲区
 		VkResult flush(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);
 		VkResult invalidate(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);
-		void setupDescriptore(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0);
-		VkBuffer getBuffer()  { return m_Buffer; }
+
 	private:
 		VkDevice m_Device = VK_NULL_HANDLE;
 		VkBuffer m_Buffer = VK_NULL_HANDLE;

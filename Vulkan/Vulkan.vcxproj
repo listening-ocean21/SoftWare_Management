@@ -143,11 +143,13 @@
     <ClCompile Include="Head\6_VertexBuffer\CVertexBuffer.h" />
     <ClCompile Include="Head\7_IndexBuffer\CIndexBuffer.h" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Source\10_Shader\CShader.cpp" />
     <ClCompile Include="Source\1_Device\CLogicalDevice.cpp" />
     <ClCompile Include="Source\2_Buffer\CBuffer.cpp" />
     <ClCompile Include="Source\3_CommandBuffer\CCommandBuffer.cpp" />
     <ClCompile Include="Source\6_VertexBuffer\CVertexBuffer.cpp" />
     <ClCompile Include="Source\7_IndexBuffer\CIndexBuffer.cpp" />
+    <ClCompile Include="Source\9_PipeLine\CPipeLine.cpp" />
     <ClCompile Include="Test.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -210,11 +212,13 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="Head\10_Shader\CShader.h" />
     <ClInclude Include="Head\1_Device\CLogicalDevice.h" />
     <ClInclude Include="Head\2_Buffer\CBuffer.h" />
     <ClInclude Include="Head\3_CommandBuffer\CCommandBuffer.h" />
     <ClInclude Include="Head\4_Queue\CVKQueue.h" />
     <ClInclude Include="Head\5_Synchronization\CSynchronization.h" />
+    <ClInclude Include="Head\9_PipeLine\CPipeLine.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="ShadowMap\CShadowMap.h" />
     <ClInclude Include="ShadowMap\VulkanBuffer.hpp" />

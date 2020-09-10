@@ -76,6 +76,18 @@
     <Filter Include="源文件\7_IndexBuffer">
       <UniqueIdentifier>{986948a9-e2f4-452b-91a8-4e4d30c3a3e8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="头文件\10_Shader">
+      <UniqueIdentifier>{c032e8fd-a76a-4cbc-86c2-a60ef5e56432}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="头文件\9_PipeLine">
+      <UniqueIdentifier>{44b6163c-2184-4523-b85d-a9489c87d442}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\9_PipeLine">
+      <UniqueIdentifier>{813bd466-8a8a-454a-8dd9-28e298c6b47a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\10_Shader">
+      <UniqueIdentifier>{306b2239-b492-47bc-819d-388ffc5b390e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -107,6 +119,12 @@
     </ClCompile>
     <ClCompile Include="Head\7_IndexBuffer\CIndexBuffer.h">
       <Filter>头文件\7_IndexBuffer</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\9_PipeLine\CPipeLine.cpp">
+      <Filter>源文件\9_PipeLine</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\10_Shader\CShader.cpp">
+      <Filter>源文件\10_Shader</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -217,6 +235,12 @@
     </ClInclude>
     <ClInclude Include="Source\5_Synchronization\CSynchronization.cpp">
       <Filter>源文件\5_Synchronization</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\10_Shader\CShader.h">
+      <Filter>头文件\10_Shader</Filter>
+    </ClInclude>
+    <ClInclude Include="Head\9_PipeLine\CPipeLine.h">
+      <Filter>头文件\9_PipeLine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -1,4 +1,3 @@
-#include <vulkan\vulkan.h>
 #include "../../Head/1_Device/CLogicalDevice.h"
 
 namespace vk_Demo
@@ -9,10 +8,10 @@ namespace vk_Demo
 		CCommandBuffer();
 		virtual ~CCommandBuffer() {};
 
-		CCommandBuffer* createCommandBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkCommandPool vCommandPool, VkCommandBufferLevel vLevel = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		void begin();
 		void end();
 		void submit(VkSemaphore* vSignalSemaphore = nullptr);
+		CCommandBuffer* createCommandBuffer(std::shared_ptr<CLogicalDevice> vDevice, VkCommandPool vCommandPool, VkCommandBufferLevel vLevel = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		VkCommandBuffer getCommandBuffer() const { return m_CommandBuffer; }
 	private:
 		VkCommandBuffer                   m_CommandBuffer = VK_NULL_HANDLE;
