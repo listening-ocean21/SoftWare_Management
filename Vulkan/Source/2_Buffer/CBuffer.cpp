@@ -17,7 +17,10 @@ namespace vk_Demo
 		}
 	}
 
-	//将物理设备内存与本地主机建立映射关系
+	//将
+	
+	
+	与本地主机建立映射关系
 	VkResult CBuffer::map(VkDeviceSize vSize = VK_WHOLE_SIZE, VkDeviceSize vOffset = 0)
 	{
 		if (m_pMapped)

@@ -140,6 +140,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="CCamera.cpp" />
+    <ClCompile Include="CThread.cpp" />
     <ClCompile Include="Head\6_VertexBuffer\CVertexBuffer.h" />
     <ClCompile Include="Head\7_IndexBuffer\CIndexBuffer.h" />
     <ClCompile Include="main.cpp" />
@@ -205,6 +206,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClInclude>
+    <ClInclude Include="CThread.h" />
     <ClInclude Include="CVertexShader.h" />
     <ClInclude Include="CWindowSurface.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>

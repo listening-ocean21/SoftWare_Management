@@ -1187,8 +1187,7 @@ private:
 		PipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		PipelineLayoutCreateInfo.setLayoutCount = 1; // Optional
 		PipelineLayoutCreateInfo.pSetLayouts = &m_DescriptorSetLayout; // Optional
-
-
+ 
 		if (vkCreatePipelineLayout(m_Device, &PipelineLayoutCreateInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create pipeline layout!");
 		}

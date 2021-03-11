@@ -88,6 +88,9 @@
     <Filter Include="源文件\10_Shader">
       <UniqueIdentifier>{306b2239-b492-47bc-819d-388ffc5b390e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="头文件\ThreadMange">
+      <UniqueIdentifier>{283db6aa-6bd1-4837-a20c-17d86265eb4c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -125,6 +128,9 @@
     </ClCompile>
     <ClCompile Include="Source\10_Shader\CShader.cpp">
       <Filter>源文件\10_Shader</Filter>
+    </ClCompile>
+    <ClCompile Include="CThread.cpp">
+      <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -241,6 +247,9 @@
     </ClInclude>
     <ClInclude Include="Head\9_PipeLine\CPipeLine.h">
       <Filter>头文件\9_PipeLine</Filter>
+    </ClInclude>
+    <ClInclude Include="CThread.h">
+      <Filter>头文件\ThreadMange</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
